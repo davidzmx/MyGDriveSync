@@ -138,10 +138,10 @@ Cuando navegues con Dolphin dentro de tu carpeta de Google Drive (`~/GoogleDrive
 
 ## 📦 Generación de Instaladores para Linux (.deb y AppImage)
 
-El proyecto incluye scripts automatizados para generar instaladores profesionales listos para distribuir en Debian, Ubuntu y cualquier distribución Linux.
+El proyecto incluye scripts y flujos CI automatizados para generar instaladores profesionales listos para distribuir en Debian, Ubuntu, cualquier distribución Linux y Windows.
 
 ### 1. Generar paquete nativo `.deb` (Debian 12 / Ubuntu / KDE)
-Este instalador configura todo en el sistema operativo: binario en `/usr/bin/gdrive-sync`, acceso directo en el menú de aplicaciones de KDE Plasma, icono en alta resolución y el Service Menu para Dolphin a nivel del sistema.
+Este instalador configura todo en el sistema operativo: binario en `/usr/bin/mygdrivesync`, acceso directo en el menú de aplicaciones de KDE Plasma / GNOME, icono en alta resolución y el Service Menu para Dolphin a nivel del sistema.
 
 Ejecuta el script:
 ```bash
@@ -149,83 +149,85 @@ Ejecuta el script:
 ```
 
 El instalador se generará en:
-`dist/gdrive-sync_0.1.0_amd64.deb`
+`dist/mygdrivesync_0.1.0_amd64.deb`
 
-#### Cómo instalarlo en Debian 12:
+#### Cómo instalarlo en Debian 12 / Ubuntu:
 ```bash
-sudo apt install ./dist/gdrive-sync_0.1.0_amd64.deb
+sudo apt install ./dist/mygdrivesync_0.1.0_amd64.deb
 ```
 O con `dpkg`:
 ```bash
-sudo dpkg -i dist/gdrive-sync_0.1.0_amd64.deb
+sudo dpkg -i dist/mygdrivesync_0.1.0_amd64.deb
 ```
 
 #### Cómo desinstalarlo:
 ```bash
-sudo apt remove gdrive-sync
+sudo apt remove mygdrivesync
 ```
 
 ---
 
 ### 2. Generar paquete universal `AppImage` (Para cualquier distribución Linux)
-Un solo archivo ejecutable portátil que funciona en cualquier distribución sin requerir instalación:
+Un solo archivo ejecutable portátil que funciona en cualquier distribución (Debian, Fedora, Arch, Ubuntu, openSUSE, etc.) sin requerir instalación previa ni permisos de root:
 
 ```bash
 ./scripts/build_appimage.sh
 ```
 El archivo se generará en:  
-`dist/GoogleDriveSync-x86_64.AppImage`
+`dist/MyGDriveSync-x86_64.AppImage`
 
 Para usarlo en cualquier equipo:
 ```bash
-chmod +x dist/GoogleDriveSync-x86_64.AppImage
-./dist/GoogleDriveSync-x86_64.AppImage
+chmod +x dist/MyGDriveSync-x86_64.AppImage
+./dist/MyGDriveSync-x86_64.AppImage
 ```
+
+---
+
+## ☁️ Compilación automática en la nube (GitHub Actions)
+
+El repositorio incluye flujos automáticos de CI/CD para generar todos los instaladores sin necesidad de compilar manualmente:
+
+### Flujo Linux (`.github/workflows/build-linux.yml`)
+Genera automáticamente:
+- **`MyGDriveSync-Linux-deb`**: Paquete instalable `.deb` (`mygdrivesync_0.1.0_amd64.deb`).
+- **`MyGDriveSync-Linux-AppImage`**: Ejecutable portátil universal `MyGDriveSync-x86_64.AppImage`.
+
+### Flujo Windows (`.github/workflows/build-windows.yml`)
+Genera automáticamente:
+- **`MyGDriveSync-Windows-Installer`**: Instalador profesional con Inno Setup (`MyGDriveSync_Setup_x64.exe`).
+
+### Cómo descargarlos desde GitHub:
+1. Sube tus cambios al repositorio con `git push origin main`.
+2. En GitHub, ve a la pestaña **Actions**.
+3. Selecciona la ejecución del workflow (ej. **Build Linux Packages** o **Build Windows Installer**).
+4. En la parte inferior de la página (sección **Artifacts**), descarga directamente los instaladores listos para usar.
 
 ---
 
 ## 🪟 Generación del Instalador para Windows (`.exe` Setup)
 
-Para Windows se utiliza el estándar de la industria: **Inno Setup**, el cual genera un instalador profesional con asistente gráfico (`GoogleDriveSync_Setup_x64.exe`), desinstalador automático en el Panel de Control, accesos directos e icono multi-resolución.
+Para Windows se utiliza el estándar de la industria: **Inno Setup**, el cual genera un instalador profesional con asistente gráfico (`MyGDriveSync_Setup_x64.exe`), desinstalador automático en el Panel de Control, accesos directos e icono multi-resolución.
 
-### Opción A: Compilar en una máquina con Windows (Script automatizado)
-En tu equipo o máquina virtual con Windows:
-1. Clona o copia la carpeta del proyecto.
+### Compilar localmente en Windows:
+1. Clona o copia la carpeta del proyecto en una máquina Windows.
 2. Abre la consola (`CMD` o `PowerShell`) dentro de la carpeta.
 3. Ejecuta el script:
    ```cmd
    scripts\build_windows.bat
    ```
-4. El script se encarga de:
-   * Crear el entorno virtual e instalar las dependencias (`PySide6`, `watchdog`, `google-api-python-client`, `keyring`).
-   * Compilar el binario optimizado con `pyinstaller gdrive_sync_windows.spec`.
-   * Invocar a Inno Setup (`ISCC.exe scripts\installer.iss`).
-   * Generar el instalador final en:  
-     `dist\GoogleDriveSync_Setup_x64.exe`
+4. El script generará el instalador final en:  
+   `dist\MyGDriveSync_Setup_x64.exe`
 
 > **Nota:** Puedes descargar **Inno Setup** gratuitamente desde [jrsoftware.org](https://jrsoftware.org/isdl.php).
 
 ---
 
-### Opción B: Compilación automática en la nube (GitHub Actions)
-Si estás en Linux y no quieres usar una máquina Windows para compilar:
-1. El proyecto ya incluye el flujo configurado en `.github/workflows/build-windows.yml`.
-2. Sube el código a tu repositorio de GitHub:
-   ```bash
-   git add .
-   git commit -m "Compilar instalador Windows"
-   git push
-   ```
-3. En GitHub, ve a la pestaña **Actions > Build Windows Installer**.
-4. Al finalizar la ejecución (toma ~2 minutos), descarga el archivo compilado `GoogleDriveSync-Windows-Installer` que contiene el ejecutable `GoogleDriveSync_Setup_x64.exe` listo para distribuir.
-
----
-
 ### Qué incluye el instalador de Windows:
 * Asistente de instalación en español e inglés.
-* Selección de ruta de instalación (por defecto `C:\Program Files\GoogleDriveSync`).
+* Selección de ruta de instalación (por defecto `C:\Program Files\MyGDriveSync`).
 * Acceso directo en el **Menú Inicio** y en el **Escritorio**.
-* Casilla opcional: *"Iniciar Google Drive Sync automáticamente al iniciar Windows"* (añade entrada en el registro `HKCU\...\Run`).
+* Casilla opcional: *"Iniciar MyGDriveSync automáticamente al iniciar Windows"* (añade entrada en el registro `HKCU\...\Run`).
 * Desinstalador completo registrado en **Configuración de Windows > Aplicaciones instaladas** (o Panel de Control).
 * Icono multi-tamaño incrustado en el ejecutable (`assets/gdrive-sync.ico`).
 

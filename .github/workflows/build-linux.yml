@@ -1,4 +1,4 @@
-name: Build Linux Package (.deb)
+name: Build Linux Packages (.deb & AppImage)
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev libgl1-mesa-glx libegl1-mesa libxkbcommon-x11-0
+          sudo apt-get install -y dpkg-dev curl libgl1-mesa-glx libegl1-mesa libxkbcommon-x11-0
 
       - name: Install Python dependencies
         run: |
@@ -41,9 +41,21 @@ jobs:
           chmod +x scripts/build_deb.sh
           ./scripts/build_deb.sh
 
-      - name: Upload Debian Package Artifact
+      - name: Build AppImage (Universal Linux)
+        run: |
+          chmod +x scripts/build_appimage.sh
+          ./scripts/build_appimage.sh
+
+      - name: Upload Debian Package (.deb)
         uses: actions/upload-artifact@v4
         with:
           name: MyGDriveSync-Linux-deb
           path: dist/mygdrivesync_0.1.0_amd64.deb
+          if-no-files-found: error
+
+      - name: Upload AppImage (Portable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyGDriveSync-Linux-AppImage
+          path: dist/MyGDriveSync-x86_64.AppImage
           if-no-files-found: error
