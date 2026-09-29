@@ -123,6 +123,9 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: David <david@localhost>
 Depends: libc6, libgl1
+Replaces: gdrive-sync
+Conflicts: gdrive-sync
+Provides: gdrive-sync
 Description: MyGDriveSync Client
  Cliente de sincronización en carpeta local estilo Dropbox para Google Drive.
  Incluye soporte de sincronización selectiva, icono dinámico en la bandeja
