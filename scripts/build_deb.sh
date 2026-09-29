@@ -163,14 +163,10 @@ chmod 755 "$PKG_DIR/DEBIAN/postrm"
 echo "==> 5. Construyendo paquete .deb con dpkg-deb..."
 dpkg-deb --build --root-owner-group "$PKG_DIR" "$OUTPUT_DEB"
 
-# Copia de compatibilidad
-cp "$OUTPUT_DEB" "dist/gdrive-sync_0.1.0_amd64.deb"
-
 echo ""
 echo "======================================================================"
 echo " ¡Paquete Debian generado exitosamente!"
 echo " Ubicación: $OUTPUT_DEB"
-echo " (También disponible como dist/gdrive-sync_0.1.0_amd64.deb)"
 echo ""
 echo " Para instalarlo en tu sistema ejecuta:"
 echo "   sudo apt install ./$OUTPUT_DEB"

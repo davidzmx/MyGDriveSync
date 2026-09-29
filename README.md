@@ -130,9 +130,9 @@ Para conectar tu propia cuenta personal de Google Drive:
 ## 🐬 Integración con Dolphin (KDE)
 
 Al arrancar la aplicación por primera vez en Linux, se instala automáticamente la acción para Dolphin.  
-Cuando navegues con Dolphin dentro de tu carpeta de Google Drive (`~/GoogleDrive`), al hacer clic derecho en cualquier archivo verás el submenú:
-* **Google Drive Sync > Abrir en Google Drive (Web)**
-* **Google Drive Sync > Copiar enlace web de Drive**
+Cuando navegues con Dolphin dentro de tu carpeta de Google Drive (`~/MyGDriveSync`), al hacer clic derecho en cualquier archivo verás el submenú:
+* **MyGDriveSync > Abrir en Google Drive (Web)**
+* **MyGDriveSync > Copiar enlace web de Drive**
 
 ---
 
