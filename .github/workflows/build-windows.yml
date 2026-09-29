@@ -3,9 +3,13 @@ name: Build Windows Installer
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -45,3 +49,9 @@ jobs:
           name: MyGDriveSync-Windows-Installer
           path: dist/MyGDriveSync_Setup_x64.exe
           if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MyGDriveSync_Setup_x64.exe

@@ -3,9 +3,13 @@ name: Build Linux Packages (.deb & AppImage)
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-linux:
@@ -59,3 +63,11 @@ jobs:
           name: MyGDriveSync-Linux-AppImage
           path: dist/MyGDriveSync-x86_64.AppImage
           if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/mygdrivesync_0.1.0_amd64.deb
+            dist/MyGDriveSync-x86_64.AppImage

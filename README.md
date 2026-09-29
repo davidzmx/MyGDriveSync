@@ -210,6 +210,33 @@ Genera automáticamente imágenes de disco nativas (`.dmg`):
 
 ---
 
+## 🚀 Cómo publicar una versión oficial (GitHub Release)
+
+Una **Release** en GitHub publica una versión oficial descargable para el público con todos los instaladores listos en la página principal del proyecto.
+
+### Opción A: Publicación 100% automatizada con Git Tag (Recomendado)
+Simplemente crea una etiqueta de versión y súbela a GitHub:
+```bash
+git tag -a v0.1.0 -m "Release v0.1.0 - Sincronización bidireccional y selectiva para Google Drive"
+git push origin v0.1.0
+```
+GitHub Actions detectará la etiqueta `v*`, compilará en paralelo para las 3 plataformas y publicará automáticamente la **Release** con los 5 instaladores adjuntos:
+- `MyGDriveSync_Setup_x64.exe` (Windows)
+- `mygdrivesync_0.1.0_amd64.deb` (Linux Debian / Ubuntu)
+- `MyGDriveSync-x86_64.AppImage` (Linux Universal)
+- `MyGDriveSync-AppleSilicon.dmg` (macOS Apple Silicon)
+- `MyGDriveSync-Intel.dmg` (macOS Intel)
+
+### Opción B: Manual desde la web de GitHub
+1. Ve a tu repositorio en `https://github.com/davidzmx/MyGDriveSync/releases`.
+2. Haz clic en **"Draft a new release"** (o "Create a new release").
+3. En **Choose a tag**, escribe `v0.1.0` y selecciona *"Create new tag"*.
+4. Escribe el título de la versión (ej. `MyGDriveSync v0.1.0`) y describe las novedades.
+5. Arrastra los archivos compilados que descargaste de la sección de **Actions > Artifacts**.
+6. Haz clic en **Publish release**.
+
+---
+
 ## 🍎 Generación del Instalador para macOS (`.dmg`)
 
 En macOS, la aplicación se distribuye como una imagen de disco estándar (`.dmg`) que contiene el paquete `MyGDriveSync.app` y el acceso directo a `/Applications` para instalación mediante arrastrar y soltar (drag & drop).
