@@ -90,6 +90,23 @@ class TestDatabaseManager(unittest.TestCase):
         self.db.set_kv("start_token", "789012")
         self.assertEqual(self.db.get_kv("start_token"), "789012")
 
+    def test_get_drive_id_for_path(self):
+        # 1. Look up in sync_folders
+        self.db.set_folder_sync_state("drive-folder-123", "SyncGDrive", is_synced=True)
+        self.assertEqual(self.db.get_drive_id_for_path("SyncGDrive"), "drive-folder-123")
+
+        # 2. Look up in sync_items (takes precedence if present)
+        item = SyncItem(
+            rel_path="SyncGDrive/Subfolder",
+            item_type=ItemType.FOLDER,
+            drive_id="drive-subfolder-456",
+        )
+        self.db.upsert_item(item)
+        self.assertEqual(self.db.get_drive_id_for_path("SyncGDrive/Subfolder"), "drive-subfolder-456")
+
+        # 3. Non existent path
+        self.assertIsNone(self.db.get_drive_id_for_path("NonExistent"))
+
 
 if __name__ == "__main__":
     unittest.main()

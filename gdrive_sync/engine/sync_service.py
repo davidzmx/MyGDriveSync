@@ -464,6 +464,54 @@ class SyncService(QObject):
         if self.queue and self.queue.pending_count() == 0:
             self.status_changed.emit("IDLE")
 
+    def _resolve_or_create_remote_parent(self, rel_path: str) -> str:
+        """
+        Resolves the Drive ID of the parent directory for a given rel_path.
+        If the parent directory or any intermediate directories do not exist on Drive,
+        creates them and caches/records them in the database.
+        """
+        root_id = "root"
+        if self.drive_client:
+            root_id = self.drive_client.get_root_id() or "root"
+
+        if "/" not in rel_path:
+            return root_id
+
+        parent_rel = rel_path.rsplit("/", 1)[0]
+
+        # 1. Direct match in sync_items or sync_folders
+        direct_id = self.db.get_drive_id_for_path(parent_rel)
+        if direct_id:
+            return direct_id
+
+        # 2. Walk ancestors from root down to ensure intermediate folders exist in Drive
+        parts = parent_rel.split("/")
+        current_rel = ""
+        current_parent_id = root_id
+
+        for part in parts:
+            current_rel = f"{current_rel}/{part}" if current_rel else part
+            cached_id = self.db.get_drive_id_for_path(current_rel)
+            if cached_id:
+                current_parent_id = cached_id
+            else:
+                if self.drive_client:
+                    folder_id = self.drive_client.create_folder(name=part, parent_id=current_parent_id)
+                else:
+                    folder_id = f"mock_{part}"
+                self._folder_cache[folder_id] = current_rel
+                folder_item = SyncItem(
+                    rel_path=current_rel,
+                    item_type=ItemType.FOLDER,
+                    drive_id=folder_id,
+                    parent_drive_id=current_parent_id,
+                    status=SyncStatus.SYNCED,
+                )
+                self.db.upsert_item(folder_item)
+                current_parent_id = folder_id
+
+        return current_parent_id
+
     def _handle_upload(self, task: SyncTask, full_path: Path) -> None:
         if not full_path.exists():
             return
@@ -476,12 +524,7 @@ class SyncService(QObject):
         existing = self.db.get_item_by_path(task.rel_path)
         existing_id = existing.drive_id if existing else None
 
-        parent_id = "root"
-        if "/" in task.rel_path:
-            parent_rel = task.rel_path.rsplit("/", 1)[0]
-            parent_item = self.db.get_item_by_path(parent_rel)
-            if parent_item and parent_item.drive_id:
-                parent_id = parent_item.drive_id
+        parent_id = self._resolve_or_create_remote_parent(task.rel_path)
 
         res = self.drive_client.upload_file(
             local_path=full_path,
@@ -494,6 +537,7 @@ class SyncService(QObject):
             rel_path=task.rel_path,
             item_type=ItemType.FILE,
             drive_id=res.get("id"),
+            parent_drive_id=parent_id,
             size=full_path.stat().st_size,
             mtime_local=full_path.stat().st_mtime,
             mtime_remote=res.get("modifiedTime"),
@@ -561,20 +605,23 @@ class SyncService(QObject):
                     pass
 
     def _handle_create_folder(self, task: SyncTask, full_path: Path) -> None:
-        parent_id = "root"
-        if "/" in task.rel_path:
-            parent_rel = task.rel_path.rsplit("/", 1)[0]
-            parent_item = self.db.get_item_by_path(parent_rel)
-            if parent_item and parent_item.drive_id:
-                parent_id = parent_item.drive_id
+        existing_id = self.db.get_drive_id_for_path(task.rel_path)
+        if existing_id:
+            self._folder_cache[existing_id] = task.rel_path
+            return
 
-        folder_id = self.drive_client.create_folder(name=full_path.name, parent_id=parent_id)
+        parent_id = self._resolve_or_create_remote_parent(task.rel_path)
+        if self.drive_client:
+            folder_id = self.drive_client.create_folder(name=full_path.name, parent_id=parent_id)
+        else:
+            folder_id = f"mock_{full_path.name}"
         self._folder_cache[folder_id] = task.rel_path
 
         item = SyncItem(
             rel_path=task.rel_path,
             item_type=ItemType.FOLDER,
             drive_id=folder_id,
+            parent_drive_id=parent_id,
             status=SyncStatus.SYNCED,
         )
         self.db.upsert_item(item)

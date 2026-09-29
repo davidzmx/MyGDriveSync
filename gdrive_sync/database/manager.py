@@ -253,6 +253,33 @@ class DatabaseManager:
             for row in cur.fetchall()
         ]
 
+    def get_sync_folder_by_path(self, rel_path: str) -> Optional[SyncFolder]:
+        """Returns a SyncFolder entry by its relative path."""
+        normalized = SyncItem.normalize_path(rel_path)
+        conn = self._get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM sync_folders WHERE rel_path = ? LIMIT 1;", (normalized,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return SyncFolder(
+            drive_id=row["drive_id"],
+            rel_path=row["rel_path"],
+            is_synced=bool(row["is_synced"]),
+            last_scanned=row["last_scanned"],
+        )
+
+    def get_drive_id_for_path(self, rel_path: str) -> Optional[str]:
+        """Looks up the drive_id for a path in sync_items or sync_folders."""
+        normalized = SyncItem.normalize_path(rel_path)
+        item = self.get_item_by_path(normalized)
+        if item and item.drive_id:
+            return item.drive_id
+        folder = self.get_sync_folder_by_path(normalized)
+        if folder and folder.drive_id:
+            return folder.drive_id
+        return None
+
     def is_path_selected_for_sync(self, rel_path: str) -> bool:
         """
         Determines if a path should be synced based on selective sync rules.
