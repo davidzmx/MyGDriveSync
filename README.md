@@ -197,12 +197,41 @@ Genera automáticamente:
 Genera automáticamente:
 - **`MyGDriveSync-Windows-Installer`**: Instalador profesional con Inno Setup (`MyGDriveSync_Setup_x64.exe`).
 
+### Flujo macOS (`.github/workflows/build-macos.yml`)
+Genera automáticamente imágenes de disco nativas (`.dmg`):
+- **`MyGDriveSync-macOS-AppleSilicon-DMG`**: Para Macs con chips Apple Silicon (M1, M2, M3, M4).
+- **`MyGDriveSync-macOS-Intel-DMG`**: Para Macs con procesadores Intel (x86_64).
+
 ### Cómo descargarlos desde GitHub:
 1. Sube tus cambios al repositorio con `git push origin main`.
 2. En GitHub, ve a la pestaña **Actions**.
-3. Selecciona la ejecución del workflow (ej. **Build Linux Packages** o **Build Windows Installer**).
+3. Selecciona la ejecución del workflow deseado (**Build Linux Packages**, **Build Windows Installer** o **Build macOS Installer**).
 4. En la parte inferior de la página (sección **Artifacts**), descarga directamente los instaladores listos para usar.
 
+---
+
+## 🍎 Generación del Instalador para macOS (`.dmg`)
+
+En macOS, la aplicación se distribuye como una imagen de disco estándar (`.dmg`) que contiene el paquete `MyGDriveSync.app` y el acceso directo a `/Applications` para instalación mediante arrastrar y soltar (drag & drop).
+
+### Compilar localmente en macOS:
+1. Clona o copia el proyecto en una Mac.
+2. Abre la Terminal en la carpeta del proyecto.
+3. Ejecuta el script:
+   ```bash
+   chmod +x scripts/build_macos.sh
+   ./scripts/build_macos.sh
+   ```
+4. El archivo generado quedará en:
+   `dist/MyGDriveSync.dmg`
+
+### Instalación en macOS:
+1. Haz doble clic en `MyGDriveSync.dmg`.
+2. Arrastra el icono de **MyGDriveSync** hacia la carpeta **Applications**.
+3. > **Nota de seguridad (Gatekeeper):** Si macOS muestra *"No se puede abrir porque proviene de un desarrollador no identificado"*, haz clic derecho (o Control + clic) sobre la aplicación en `/Applications` y selecciona **Abrir**, o ejecuta en Terminal:
+   > ```bash
+   > xattr -cr /Applications/MyGDriveSync.app
+   > ```
 ---
 
 ## 🪟 Generación del Instalador para Windows (`.exe` Setup)
