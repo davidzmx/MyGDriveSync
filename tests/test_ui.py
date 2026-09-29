@@ -43,10 +43,14 @@ class TestUIComponents(unittest.TestCase):
         for state in ["IDLE", "SYNCING", "PAUSED", "ERROR", "NO_AUTH"]:
             icon = create_tray_icon(state)
             self.assertFalse(icon.isNull())
+        icon_prog = create_tray_icon("SYNCING", progress=50)
+        self.assertFalse(icon_prog.isNull())
 
     def test_activity_dialog(self):
         dialog = ActivityDialog(self.db)
         self.assertIsNotNone(dialog)
+        dialog.update_active_progress("song.mp3", 500, 1000, pending=2)
+        self.assertIn("50%", dialog.lbl_active.text())
         dialog.close()
 
     def test_preferences_dialog(self):
@@ -72,6 +76,9 @@ class TestUIComponents(unittest.TestCase):
         self.assertIsNotNone(tray)
         self.assertIsNotNone(tray.contextMenu())
         self.assertIsNotNone(tray.action_about)
+        tray._on_progress_updated("song.mp3", 500, 1000)
+        self.assertIn("50%", tray.action_status.text())
+        self.assertIn("song.mp3", tray.toolTip())
 
 
 if __name__ == "__main__":

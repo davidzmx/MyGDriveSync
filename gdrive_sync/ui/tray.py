@@ -194,8 +194,39 @@ class GDriveTrayIcon(QSystemTrayIcon):
             self._act_dialog.refresh_history()
 
     def _on_progress_updated(self, filename: str, done: int, total: int):
+        from .. import __version__
+        pending = self.service.queue.pending_count() if self.service.queue else 0
+
+        if total > 0 and done < total:
+            pct = int((done / total) * 100)
+            self.setIcon(create_tray_icon("SYNCING", progress=pct))
+
+            done_str = self._format_size(done)
+            total_str = self._format_size(total)
+            pending_str = f" • {pending} restante(s)" if pending > 0 else ""
+
+            self.action_status.setText(f"MyGDriveSync v{__version__}: Sincronizando ({pct}%)")
+            self.setToolTip(
+                f"MyGDriveSync v{__version__}\n"
+                f"Sincronizando: {filename} ({pct}% • {done_str} de {total_str}){pending_str}"
+            )
+        elif done >= total and pending == 0:
+            self.setIcon(create_tray_icon("IDLE"))
+            self.action_status.setText(f"MyGDriveSync v{__version__}: Al día")
+            self.setToolTip(f"MyGDriveSync v{__version__} - Al día")
+
         if self._act_dialog and self._act_dialog.isVisible():
-            self._act_dialog.update_active_progress(filename, done, total)
+            self._act_dialog.update_active_progress(filename, done, total, pending)
+
+    @staticmethod
+    def _format_size(bytes_val: int) -> str:
+        if bytes_val <= 0:
+            return "-"
+        for unit in ["B", "KB", "MB", "GB"]:
+            if bytes_val < 1024:
+                return f"{bytes_val:.1f} {unit}"
+            bytes_val /= 1024
+        return f"{bytes_val:.1f} TB"
 
     def _show_about(self):
         from .. import __version__

@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 
 
-def create_tray_icon(state: str = "IDLE", size: int = 64) -> QIcon:
+def create_tray_icon(state: str = "IDLE", size: int = 64, progress: Optional[int] = None) -> QIcon:
     """
     Renders clean, modern vector-style icons for system tray in KDE and Windows.
     States: 'IDLE', 'SYNCING', 'PAUSED', 'ERROR', 'NO_AUTH'
@@ -44,13 +44,27 @@ def create_tray_icon(state: str = "IDLE", size: int = 64) -> QIcon:
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(rect)
 
-        # White rotating arrows/arc
-        pen = QPen(QColor(255, 255, 255), size * 0.08)
-        pen.setCapStyle(Qt.RoundCap)
-        painter.setPen(pen)
-        inner_rect = QRectF(size * 0.25, size * 0.25, size * 0.5, size * 0.5)
-        painter.drawArc(inner_rect, 45 * 16, 230 * 16)
-        painter.drawArc(inner_rect, 225 * 16, 230 * 16)
+        if progress is not None and 0 <= progress <= 100:
+            # Draw circular progress track
+            track_pen = QPen(QColor(255, 255, 255, 75), size * 0.12)
+            painter.setPen(track_pen)
+            ring_rect = QRectF(size * 0.16, size * 0.16, size * 0.68, size * 0.68)
+            painter.drawArc(ring_rect, 0, 360 * 16)
+
+            # Draw progress ring
+            prog_pen = QPen(QColor(255, 255, 255), size * 0.12)
+            prog_pen.setCapStyle(Qt.RoundCap)
+            painter.setPen(prog_pen)
+            span_angle = int(-(progress / 100.0) * 360 * 16)
+            painter.drawArc(ring_rect, 90 * 16, span_angle)
+        else:
+            # White rotating arrows/arc
+            pen = QPen(QColor(255, 255, 255), size * 0.08)
+            pen.setCapStyle(Qt.RoundCap)
+            painter.setPen(pen)
+            inner_rect = QRectF(size * 0.25, size * 0.25, size * 0.5, size * 0.5)
+            painter.drawArc(inner_rect, 45 * 16, 230 * 16)
+            painter.drawArc(inner_rect, 225 * 16, 230 * 16)
 
     elif state == "PAUSED":
         # Neutral Grey

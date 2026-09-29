@@ -47,6 +47,11 @@ class ActivityDialog(QDialog):
 
         self.progress_active = QProgressBar()
         self.progress_active.setRange(0, 100)
+        self.progress_active.setTextVisible(True)
+        self.progress_active.setStyleSheet(
+            "QProgressBar { border: 1px solid #bdc3c7; border-radius: 4px; text-align: center; height: 20px; font-size: 11px; font-weight: bold; }"
+            "QProgressBar::chunk { background-color: #1a73e8; border-radius: 3px; }"
+        )
         self.progress_active.hide()
         layout.addWidget(self.progress_active)
 
@@ -108,12 +113,16 @@ class ActivityDialog(QDialog):
             date_item = QTableWidgetItem(dt_str)
             self.table.setItem(row, 3, date_item)
 
-    def update_active_progress(self, filename: str, done: int, total: int):
+    def update_active_progress(self, filename: str, done: int, total: int, pending: int = 0):
         """Called dynamically from Qt signal."""
-        if total > 0:
+        if total > 0 and done < total:
             pct = int((done / total) * 100)
-            self.lbl_active.setText(f"Sincronizando {filename} ({pct}%)")
+            done_str = self._format_size(done)
+            total_str = self._format_size(total)
+            pending_text = f" • {pending} archivo(s) restante(s)" if pending > 0 else ""
+            self.lbl_active.setText(f"Sincronizando: {filename} ({pct}% • {done_str} de {total_str}){pending_text}")
             self.progress_active.setValue(pct)
+            self.progress_active.setFormat(f"{pct}% ({done_str} / {total_str})")
             self.progress_active.show()
         else:
             self.progress_active.hide()
