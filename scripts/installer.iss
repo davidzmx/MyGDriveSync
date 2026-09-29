@@ -5,8 +5,8 @@
 
 #define MyAppName "MyGDriveSync"
 #define MyAppVersion "0.1.0"
-#define MyAppPublisher "Developer"
-#define MyAppURL "https://github.com/david/mytests"
+#define MyAppPublisher "davidzmx"
+#define MyAppURL "https://github.com/davidzmx/MyGDriveSync"
 #define MyAppExeName "MyGDriveSync.exe"
 
 [Setup]

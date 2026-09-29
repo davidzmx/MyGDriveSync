@@ -35,14 +35,41 @@ hiddenimports = [
     'keyring.backends',
     'keyring.backends.Windows',
     'googleapiclient',
+    'googleapiclient.discovery',
+    'googleapiclient.http',
     'google_auth_oauthlib',
+    'google.auth.transport.requests',
 ]
 
-tmp_ret = collect_all('googleapiclient')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-
-tmp_ret = collect_all('PySide6')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+excludes = [
+    'tkinter',
+    'unittest',
+    'pytest',
+    'PySide6.QtWebEngineCore',
+    'PySide6.QtWebEngineWidgets',
+    'PySide6.QtWebEngineQuick',
+    'PySide6.QtQml',
+    'PySide6.QtQuick',
+    'PySide6.QtQuickWidgets',
+    'PySide6.Qt3DCore',
+    'PySide6.Qt3DRender',
+    'PySide6.Qt3DInput',
+    'PySide6.Qt3DAnimation',
+    'PySide6.Qt3DExtras',
+    'PySide6.QtDesigner',
+    'PySide6.QtMultimedia',
+    'PySide6.QtMultimediaWidgets',
+    'PySide6.QtSpatialAudio',
+    'PySide6.QtSensors',
+    'PySide6.QtPositioning',
+    'PySide6.QtBluetooth',
+    'PySide6.QtNfc',
+    'PySide6.QtPdf',
+    'PySide6.QtPdfWidgets',
+    'PySide6.QtCharts',
+    'PySide6.QtDataVisualization',
+    'PySide6.QtTest',
+]
 
 a = Analysis(
     ['run.py'],
@@ -53,9 +80,9 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'unittest', 'pytest'],
+    excludes=excludes,
     noarchive=False,
-    optimize=0,
+    optimize=1,
 )
 pyz = PYZ(a.pure)
 
