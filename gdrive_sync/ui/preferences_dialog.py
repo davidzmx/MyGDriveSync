@@ -5,7 +5,7 @@ Preferences Dialog with General settings, OAuth account management, and storage 
 from __future__ import annotations
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -37,14 +37,16 @@ class PreferencesDialog(QDialog):
     def __init__(
         self,
         config: AppConfig,
-        oauth: OAuthManager,
+        sync_service: Optional[Any] = None,
+        oauth: Optional[OAuthManager] = None,
         drive_client: Optional[GoogleDriveClient] = None,
         parent=None,
     ):
         super().__init__(parent)
         self.config = config
-        self.oauth = oauth
-        self.drive_client = drive_client
+        self.sync_service = sync_service
+        self.oauth = oauth or (sync_service.oauth if sync_service else OAuthManager(config))
+        self.drive_client = drive_client or (sync_service.drive_client if sync_service else None)
 
         self.setWindowTitle("Preferencias - MyGDriveSync")
         self.resize(540, 420)
@@ -179,34 +181,45 @@ class PreferencesDialog(QDialog):
 
     def _refresh_account_info(self):
         creds = self.oauth.get_valid_credentials()
-        if creds and self.drive_client:
-            try:
-                about = self.drive_client.get_about()
-                user = about.get("user", {})
-                email = user.get("emailAddress", "Conectado")
-                name = user.get("displayName", "")
-                self.lbl_user_email.setText(f"👤 {name} ({email})")
+        if creds:
+            if not self.drive_client and self.sync_service:
+                self.sync_service.initialize()
+                self.drive_client = self.sync_service.drive_client
+            elif not self.drive_client:
+                self.drive_client = GoogleDriveClient(creds)
 
-                quota = about.get("storageQuota", {})
-                usage = int(quota.get("usage", 0))
-                limit = int(quota.get("limit", 0))
+            if self.drive_client:
+                try:
+                    about = self.drive_client.get_about()
+                    user = about.get("user", {})
+                    email = user.get("emailAddress", "Conectado")
+                    name = user.get("displayName", "")
+                    self.lbl_user_email.setText(f"👤 {name} ({email})")
 
-                if limit > 0:
-                    pct = int((usage / limit) * 100)
-                    self.progress_quota.setValue(pct)
-                    usage_gb = usage / (1024 ** 3)
-                    limit_gb = limit / (1024 ** 3)
-                    self.lbl_quota.setText(f"Espacio utilizado: {usage_gb:.2f} GB de {limit_gb:.1f} GB ({pct}%)")
-                    self.progress_quota.show()
-                else:
-                    self.progress_quota.hide()
-                    self.lbl_quota.setText(f"Espacio utilizado: {usage / (1024**3):.2f} GB (Ilimitado)")
+                    quota = about.get("storageQuota", {})
+                    usage = int(quota.get("usage", 0))
+                    limit = int(quota.get("limit", 0))
 
-                self.btn_login.setEnabled(False)
-                self.btn_logout.setEnabled(True)
-                return
-            except Exception as e:
-                print(f"[PreferencesDialog] Error fetching account info: {e}")
+                    if limit > 0:
+                        pct = int((usage / limit) * 100)
+                        self.progress_quota.setValue(pct)
+                        usage_gb = usage / (1024 ** 3)
+                        limit_gb = limit / (1024 ** 3)
+                        self.lbl_quota.setText(f"Espacio utilizado: {usage_gb:.2f} GB de {limit_gb:.1f} GB ({pct}%)")
+                        self.progress_quota.show()
+                    else:
+                        self.progress_quota.hide()
+                        self.lbl_quota.setText(f"Espacio utilizado: {usage / (1024**3):.2f} GB (Ilimitado)")
+
+                    self.btn_login.setEnabled(False)
+                    self.btn_logout.setEnabled(True)
+                    return
+                except Exception as e:
+                    print(f"[PreferencesDialog] Error fetching account info: {e}")
+                    self.lbl_user_email.setText("👤 Sesión iniciada con Google Drive")
+                    self.btn_login.setEnabled(False)
+                    self.btn_logout.setEnabled(True)
+                    return
 
         # Not authenticated
         self.lbl_user_email.setText("⚠️ No has iniciado sesión con Google.")
@@ -254,14 +267,21 @@ class PreferencesDialog(QDialog):
 
         try:
             self.oauth.start_auth_flow()
+            if self.sync_service:
+                self.sync_service.initialize()
+                self.drive_client = self.sync_service.drive_client
+                self.sync_service.start()
+            elif not self.drive_client:
+                creds = self.oauth.get_valid_credentials()
+                if creds:
+                    self.drive_client = GoogleDriveClient(creds)
+
+            self._refresh_account_info()
             QMessageBox.information(
                 self,
                 "Sesión iniciada",
-                "¡Cuenta de Google Drive vinculada con éxito!",
+                "¡Cuenta de Google Drive vinculada con éxito!\nLa sincronización ha comenzado.",
             )
-            if self.drive_client:
-                self.drive_client.credentials = self.oauth.get_valid_credentials()
-            self._refresh_account_info()
         except Exception as e:
             QMessageBox.critical(self, "Error de autenticación", str(e))
 
@@ -273,6 +293,11 @@ class PreferencesDialog(QDialog):
             QMessageBox.Yes | QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
+            if self.sync_service:
+                self.sync_service.stop()
+                self.sync_service.drive_client = None
+                self.sync_service.status_changed.emit("NO_AUTH")
+            self.drive_client = None
             self.oauth.logout()
             self._refresh_account_info()
             QMessageBox.information(self, "Sesión cerrada", "La cuenta ha sido desconectada.")

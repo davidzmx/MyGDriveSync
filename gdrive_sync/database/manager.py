@@ -199,6 +199,25 @@ class DatabaseManager:
         cur.execute("SELECT rel_path FROM sync_items;")
         return {row["rel_path"] for row in cur.fetchall()}
 
+    def get_pending_items(self) -> List[SyncItem]:
+        """Returns all items that are pending upload or download."""
+        conn = self._get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT * FROM sync_items
+            WHERE status IN (?, ?, ?, ?)
+            ORDER BY updated_at ASC;
+            """,
+            (
+                SyncStatus.QUEUED_DOWNLOAD.value,
+                SyncStatus.DOWNLOADING.value,
+                SyncStatus.QUEUED_UPLOAD.value,
+                SyncStatus.UPLOADING.value,
+            ),
+        )
+        return [self._row_to_item(r) for r in cur.fetchall()]
+
     # -------------------------------------------------------------------------
     # Selective Sync Folders
     # -------------------------------------------------------------------------

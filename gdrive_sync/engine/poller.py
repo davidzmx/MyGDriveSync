@@ -72,8 +72,16 @@ class CloudPoller:
 
         page_token = self.db.get_kv("start_page_token")
         if not page_token:
-            # First run: acquire start token
+            # First run: acquire start token for future deltas
             start_token = self.client.get_start_page_token()
+            # Crawl all existing files and folders in Google Drive
+            try:
+                initial_files = self.client.list_all_files()
+                for file_meta in initial_files:
+                    self.on_remote_change(file_meta)
+            except Exception as e:
+                print(f"[CloudPoller] Error during initial files crawl: {e}")
+
             self.db.set_kv("start_page_token", start_token)
             return
 

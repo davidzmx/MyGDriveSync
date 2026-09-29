@@ -31,13 +31,15 @@ class SelectiveSyncDialog(QDialog):
     def __init__(
         self,
         db: DatabaseManager,
-        drive_client: Optional[GoogleDriveClient],
-        sync_dir: Path,
+        drive_client: Optional[GoogleDriveClient] = None,
+        sync_dir: Path = None,
+        sync_service: Optional[Any] = None,
         parent=None,
     ):
         super().__init__(parent)
         self.db = db
-        self.drive_client = drive_client
+        self.sync_service = sync_service
+        self.drive_client = drive_client or (sync_service.drive_client if sync_service else None)
         self.sync_dir = Path(sync_dir)
 
         self.setWindowTitle("Sincronización Selectiva - MyGDriveSync")
@@ -103,6 +105,9 @@ class SelectiveSyncDialog(QDialog):
 
     def load_folders(self):
         """Fetches remote folders and populates the tree."""
+        if not self.drive_client and self.sync_service:
+            self.drive_client = self.sync_service.drive_client
+
         if not self.drive_client:
             self.tree.clear()
             placeholder = QTreeWidgetItem(["⚠️ Inicia sesión con Google para cargar tus carpetas"])

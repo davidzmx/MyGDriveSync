@@ -96,6 +96,30 @@ class SyncService(QObject):
             )
             self.queue.start()
 
+            # Enqueue pending items from previous session
+            pending_items = self.db.get_pending_items()
+            for item in pending_items:
+                if item.item_type == ItemType.FOLDER:
+                    continue
+                if item.status in (SyncStatus.QUEUED_DOWNLOAD, SyncStatus.DOWNLOADING):
+                    priority = TaskPriority.MEDIUM if (item.size or 0) < 10 * 1024 * 1024 else TaskPriority.LOW
+                    self.queue.add_task(
+                        task_type=TaskType.DOWNLOAD,
+                        rel_path=item.rel_path,
+                        priority=priority,
+                        drive_id=item.drive_id,
+                        extra={"file_meta": {"modifiedTime": item.mtime_remote, "md5Checksum": item.md5_checksum}},
+                    )
+                elif item.status in (SyncStatus.QUEUED_UPLOAD, SyncStatus.UPLOADING):
+                    priority = TaskPriority.MEDIUM if (item.size or 0) < 10 * 1024 * 1024 else TaskPriority.LOW
+                    self.queue.add_task(
+                        task_type=TaskType.UPLOAD,
+                        rel_path=item.rel_path,
+                        priority=priority,
+                        drive_id=item.drive_id,
+                        extra={"size": item.size, "md5": item.md5_checksum},
+                    )
+
             # 2. Start local file watcher
             self.watcher = LocalFileWatcher(
                 sync_dir=self.config.sync_dir,
@@ -115,7 +139,10 @@ class SyncService(QObject):
             )
             self.poller.start()
 
-            self.status_changed.emit("IDLE")
+            if pending_items:
+                self.status_changed.emit("SYNCING")
+            else:
+                self.status_changed.emit("IDLE")
             return True
 
     def stop(self) -> None:
@@ -186,6 +213,10 @@ class SyncService(QObject):
         # Determine relative path using folder cache
         parent_rel = self._folder_cache.get(parent_id, "")
         rel_path = f"{parent_rel}/{name}".strip("/") if parent_rel else name
+
+        mime_type = file_meta.get("mimeType", "")
+        if mime_type == "application/vnd.google-apps.folder":
+            self._folder_cache[drive_id] = rel_path
 
         # Check selective sync
         if not self.db.is_path_selected_for_sync(rel_path):
@@ -318,28 +349,50 @@ class SyncService(QObject):
         if self.watcher:
             self.watcher.mark_internal_operation(task.rel_path)
 
+        actual_path = full_path
         try:
-            self.drive_client.download_file(
+            file_meta = task.extra_data.get("file_meta", {})
+            mime_type = file_meta.get("mimeType")
+            if not mime_type and task.drive_id:
+                try:
+                    meta = self.drive_client.get_file_metadata(task.drive_id)
+                    mime_type = meta.get("mimeType")
+                    file_meta.update(meta)
+                except Exception:
+                    pass
+            actual_path = self.drive_client.download_file(
                 drive_id=task.drive_id,
                 dest_local_path=full_path,
                 progress_callback=on_prog,
+                mime_type=mime_type,
             )
-            file_meta = task.extra_data.get("file_meta", {})
+            rel_path = str(actual_path.relative_to(self.config.sync_dir)).replace("\\", "/")
+            if self.watcher and rel_path != task.rel_path:
+                self.watcher.mark_internal_operation(rel_path)
+
+            file_size = actual_path.stat().st_size if actual_path.exists() else 0
+            mtime_loc = actual_path.stat().st_mtime if actual_path.exists() else 0
             item = SyncItem(
-                rel_path=task.rel_path,
+                rel_path=rel_path,
                 item_type=ItemType.FILE,
                 drive_id=task.drive_id,
-                size=full_path.stat().st_size,
-                mtime_local=full_path.stat().st_mtime,
+                size=file_size,
+                mtime_local=mtime_loc,
                 mtime_remote=file_meta.get("modifiedTime"),
                 md5_checksum=file_meta.get("md5Checksum"),
                 status=SyncStatus.SYNCED,
             )
             self.db.upsert_item(item)
-            self.file_synced.emit(task.rel_path, "Descargado")
+            self.file_synced.emit(rel_path, "Descargado")
         finally:
             if self.watcher:
                 self.watcher.unmark_internal_operation(task.rel_path)
+                try:
+                    other_rel = str(actual_path.relative_to(self.config.sync_dir)).replace("\\", "/")
+                    if other_rel != task.rel_path:
+                        self.watcher.unmark_internal_operation(other_rel)
+                except Exception:
+                    pass
 
     def _handle_create_folder(self, task: SyncTask, full_path: Path) -> None:
         parent_id = "root"

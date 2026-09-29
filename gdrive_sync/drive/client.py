@@ -98,6 +98,31 @@ class GoogleDriveClient:
 
         return cache_paths
 
+    def list_all_files(self) -> List[Dict[str, Any]]:
+        """
+        Retrieves all active files and folders in the drive for initial sync.
+        Returns a list of file metadata dictionaries.
+        """
+        files = []
+        page_token = None
+        q = "trashed = false"
+
+        while True:
+            response = self.service.files().list(
+                q=q,
+                spaces="drive",
+                fields="nextPageToken, files(id, name, mimeType, trashed, parents, md5Checksum, size, modifiedTime)",
+                pageToken=page_token,
+                pageSize=1000,
+            ).execute()
+
+            files.extend(response.get("files", []))
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
+        return files
+
     # -------------------------------------------------------------------------
     # Changes / Delta Polling
     # -------------------------------------------------------------------------
@@ -192,21 +217,63 @@ class GoogleDriveClient:
 
         return response
 
+    GOOGLE_DOCS_EXPORT_MAP: Dict[str, Tuple[str, str]] = {
+        "application/vnd.google-apps.document": (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".docx",
+        ),
+        "application/vnd.google-apps.spreadsheet": (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xlsx",
+        ),
+        "application/vnd.google-apps.presentation": (
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".pptx",
+        ),
+        "application/vnd.google-apps.drawing": (
+            "image/png",
+            ".png",
+        ),
+    }
+
     def download_file(
         self,
         drive_id: str,
         dest_local_path: Path | str,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        mime_type: Optional[str] = None,
     ) -> Path:
         """
         Downloads a file using chunked streaming into a temporary file,
         then atomically moves it into destination to avoid corruptions.
+        Automatically exports Google Docs / Sheets / Presentations to standard Office formats.
         """
         dest = Path(dest_local_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp_dest = dest.with_suffix(dest.suffix + ".sync_tmp")
 
-        request = self.service.files().get_media(fileId=drive_id)
+        if mime_type and mime_type in self.GOOGLE_DOCS_EXPORT_MAP:
+            export_mime, default_ext = self.GOOGLE_DOCS_EXPORT_MAP[mime_type]
+            if not dest.name.lower().endswith(default_ext):
+                dest = dest.with_name(dest.name + default_ext)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            tmp_dest = dest.with_suffix(dest.suffix + ".sync_tmp")
+            request = self.service.files().export_media(fileId=drive_id, mimeType=export_mime)
+        elif mime_type and mime_type.startswith("application/vnd.google-apps."):
+            # Web-only Google apps (forms, shortcuts, scripts)
+            url_file = dest.with_suffix(dest.suffix + ".desktop")
+            url_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(url_file, "w", encoding="utf-8") as f:
+                f.write(
+                    f"[Desktop Entry]\n"
+                    f"Type=Link\n"
+                    f"Name={dest.name}\n"
+                    f"URL=https://drive.google.com/open?id={drive_id}\n"
+                    f"Icon=google-chrome\n"
+                )
+            return url_file
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            tmp_dest = dest.with_suffix(dest.suffix + ".sync_tmp")
+            request = self.service.files().get_media(fileId=drive_id)
 
         with open(tmp_dest, "wb") as fh:
             downloader = MediaIoBaseDownload(fh, request, chunksize=1024 * 1024)

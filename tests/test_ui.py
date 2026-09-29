@@ -52,8 +52,7 @@ class TestUIComponents(unittest.TestCase):
     def test_preferences_dialog(self):
         dialog = PreferencesDialog(
             config=self.config,
-            oauth=self.service.oauth,
-            drive_client=None,
+            sync_service=self.service,
         )
         self.assertIsNotNone(dialog)
         dialog.close()
@@ -63,6 +62,7 @@ class TestUIComponents(unittest.TestCase):
             db=self.db,
             drive_client=None,
             sync_dir=self.config.sync_dir,
+            sync_service=self.service,
         )
         self.assertIsNotNone(dialog)
         dialog.close()

@@ -147,7 +147,8 @@ class Reconciler:
                 )
 
         # Queue download of the remote version
-        size = int(file_meta.get("size", 0))
+        raw_size = file_meta.get("size")
+        size = int(raw_size) if raw_size is not None else 0
         priority = TaskPriority.MEDIUM if size < 10 * 1024 * 1024 else TaskPriority.LOW
 
         db.upsert_item(

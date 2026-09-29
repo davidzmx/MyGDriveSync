@@ -148,6 +148,7 @@ class GDriveTrayIcon(QSystemTrayIcon):
                 db=self.db,
                 drive_client=self.service.drive_client,
                 sync_dir=self.config.sync_dir,
+                sync_service=self.service,
             )
             self._sel_dialog.show()
         else:
@@ -158,6 +159,7 @@ class GDriveTrayIcon(QSystemTrayIcon):
         if not self._pref_dialog or not self._pref_dialog.isVisible():
             self._pref_dialog = PreferencesDialog(
                 config=self.config,
+                sync_service=self.service,
                 oauth=self.service.oauth,
                 drive_client=self.service.drive_client,
             )
