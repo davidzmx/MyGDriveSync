@@ -256,7 +256,7 @@ class DatabaseManager:
     def is_path_selected_for_sync(self, rel_path: str) -> bool:
         """
         Determines if a path should be synced based on selective sync rules.
-        If a parent folder or the path itself is marked `is_synced = False`, it is excluded.
+        If a parent folder, the path itself, or root files are marked `is_synced = False`, it is excluded.
         """
         normalized = SyncItem.normalize_path(rel_path)
         if not normalized:
@@ -267,16 +267,46 @@ class DatabaseManager:
             # Default: everything is synced
             return True
 
+        folder_map = {sf.rel_path: sf.is_synced for sf in folders}
+
+        # Check root files rule
+        if "/" not in normalized:
+            if "__ROOT_FILES__" in folder_map:
+                return folder_map["__ROOT_FILES__"]
+            return True
+
         # Check path segments from top to bottom
         parts = normalized.split("/")
         current_sub = ""
-        for part in parts:
+        for part in parts[:-1]:
             current_sub = f"{current_sub}/{part}" if current_sub else part
-            for sf in folders:
-                if sf.rel_path == current_sub:
-                    if not sf.is_synced:
-                        return False
+            if current_sub in folder_map and not folder_map[current_sub]:
+                return False
+
+        # If the path itself is a folder in folder_map
+        if normalized in folder_map and not folder_map[normalized]:
+            return False
+
         return True
+
+    def delete_items_under_path(self, rel_prefix: str) -> int:
+        norm = SyncItem.normalize_path(rel_prefix)
+        conn = self._get_connection()
+        with conn:
+            cur = conn.execute(
+                "DELETE FROM sync_items WHERE rel_path = ? OR rel_path LIKE ?;",
+                (norm, f"{norm}/%"),
+            )
+            return cur.rowcount
+
+    def delete_root_file_items(self) -> int:
+        conn = self._get_connection()
+        with conn:
+            cur = conn.execute(
+                "DELETE FROM sync_items WHERE rel_path NOT LIKE '%/%' AND item_type = ?;",
+                (ItemType.FILE.value,),
+            )
+            return cur.rowcount
 
     @staticmethod
     def _row_to_item(row: sqlite3.Row) -> SyncItem:

@@ -168,13 +168,83 @@ class SyncService(QObject):
 
     def pause(self) -> None:
         self._is_paused = True
+        if self.queue:
+            self.queue.pause()
         self.status_changed.emit("PAUSED")
 
     def resume(self) -> None:
         self._is_paused = False
+        if self.queue:
+            self.queue.resume()
         self.status_changed.emit("IDLE")
         if self.poller:
             self.poller.trigger_now()
+
+    def apply_selective_sync(self, unselected_paths: List[str], sync_root_files: bool = True) -> None:
+        """
+        Safely applies selective sync:
+        1. Pauses processing.
+        2. Purges matching tasks from queue.
+        3. Deletes records from database.
+        4. Cleans up local files under unselected paths.
+        5. Resumes sync.
+        """
+        was_paused = self._is_paused
+        self.pause()
+
+        try:
+            # 1. Purge from queue
+            if self.queue:
+                def should_remove(task: SyncTask) -> bool:
+                    if not sync_root_files and "/" not in task.rel_path:
+                        return True
+                    for unsel in unselected_paths:
+                        if task.rel_path == unsel or task.rel_path.startswith(f"{unsel}/"):
+                            return True
+                    return False
+
+                self.queue.clear_tasks(should_remove)
+
+            # 2. Purge from DB
+            if not sync_root_files:
+                self.db.delete_root_file_items()
+            for unsel in unselected_paths:
+                self.db.delete_items_under_path(unsel)
+
+            # 3. Clean local disk safely
+            import shutil
+            for unsel in unselected_paths:
+                local_target = self.config.sync_dir / unsel
+                if local_target.exists():
+                    if self.watcher:
+                        self.watcher.mark_internal_operation(unsel)
+                    try:
+                        if local_target.is_dir():
+                            shutil.rmtree(str(local_target), ignore_errors=True)
+                        else:
+                            local_target.unlink(missing_ok=True)
+                    except Exception as e:
+                        print(f"[SyncService] Could not remove unselected {local_target}: {e}")
+                    finally:
+                        if self.watcher:
+                            self.watcher.unmark_internal_operation(unsel)
+
+            if not sync_root_files and self.config.sync_dir.exists():
+                for child in self.config.sync_dir.iterdir():
+                    if child.is_file() and not child.name.startswith("."):
+                        if self.watcher:
+                            self.watcher.mark_internal_operation(child.name)
+                        try:
+                            child.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                        finally:
+                            if self.watcher:
+                                self.watcher.unmark_internal_operation(child.name)
+
+        finally:
+            if not was_paused:
+                self.resume()
 
     # -------------------------------------------------------------------------
     # Internal Event Handlers
@@ -182,6 +252,9 @@ class SyncService(QObject):
 
     def _on_local_change(self, rel_path: str, event_type: str) -> None:
         if self._is_paused or not self.queue:
+            return
+
+        if not self.db.is_path_selected_for_sync(rel_path):
             return
 
         decision = Reconciler.resolve_local_change(

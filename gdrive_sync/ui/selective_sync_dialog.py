@@ -124,26 +124,50 @@ class SelectiveSyncDialog(QDialog):
             folders = self.drive_client.list_all_folders()
             self._folder_paths = self.drive_client.build_folder_paths(folders)
 
+            # Resolve actual root ID from Google Drive
+            root_id = "root"
+            try:
+                res = self.drive_client.service.files().get(fileId="root", fields="id").execute()
+                root_id = res.get("id", "root")
+            except Exception:
+                pass
+
+            id_to_folder = {f["id"]: f for f in folders}
+
             # Get current DB rules: folder_id -> is_synced
             existing_rules = {f.drive_id: f.is_synced for f in self.db.get_all_sync_folders()}
+
+            # Item 0: Root files (archivos sin carpeta)
+            root_files_item = QTreeWidgetItem()
+            root_files_item.setText(0, "📄 Archivos en la raíz de Google Drive (sin carpeta)")
+            root_files_item.setData(0, Qt.UserRole, "__ROOT_FILES__")
+            root_files_item.setFlags(root_files_item.flags() | Qt.ItemIsUserCheckable)
+            root_files_synced = existing_rules.get("__ROOT_FILES__", False)
+            root_files_item.setCheckState(0, Qt.Checked if root_files_synced else Qt.Unchecked)
+            self._items_by_id["__ROOT_FILES__"] = root_files_item
+            self.tree.addTopLevelItem(root_files_item)
 
             # Build tree hierarchy
             # Group by parent
             children_map: Dict[str, List[dict]] = {}
             for f in folders:
-                parents = f.get("parents", [])
-                p_id = parents[0] if parents else "root"
+                parents = f.get("parents")
+                if not parents or parents[0] in ("root", root_id) or parents[0] not in id_to_folder:
+                    p_id = "__TOP_LEVEL__"
+                else:
+                    p_id = parents[0]
                 children_map.setdefault(p_id, []).append(f)
 
             def add_children(parent_id: str, parent_widget_item: Optional[QTreeWidgetItem]):
-                for child in children_map.get(parent_id, []):
+                sorted_children = sorted(children_map.get(parent_id, []), key=lambda x: x.get("name", "").lower())
+                for child in sorted_children:
                     item = QTreeWidgetItem()
-                    item.setText(0, child.get("name", "Carpeta"))
+                    item.setText(0, f"📁 {child.get('name', 'Carpeta')}")
                     item.setData(0, Qt.UserRole, child["id"])
                     item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
 
-                    # Determine initial checked state: default True unless DB says False
-                    is_synced = existing_rules.get(child["id"], True)
+                    # Determine initial checked state: use existing rule if present
+                    is_synced = existing_rules.get(child["id"], True if not existing_rules else False)
                     item.setCheckState(0, Qt.Checked if is_synced else Qt.Unchecked)
 
                     self._items_by_id[child["id"]] = item
@@ -155,8 +179,8 @@ class SelectiveSyncDialog(QDialog):
 
                     add_children(child["id"], item)
 
-            add_children("root", None)
-            self.tree.expandAll()
+            add_children("__TOP_LEVEL__", None)
+            self.tree.expandToDepth(0)
 
         except Exception as e:
             QMessageBox.critical(self, "Error al cargar carpetas", str(e))
@@ -188,9 +212,19 @@ class SelectiveSyncDialog(QDialog):
     def _save_changes(self):
         """Applies selective sync rules and frees local space for unchecked folders."""
         unselected_paths: List[str] = []
+        sync_root_files = False
 
         for folder_id, item in self._items_by_id.items():
             is_synced = item.checkState(0) == Qt.Checked
+            if folder_id == "__ROOT_FILES__":
+                sync_root_files = is_synced
+                self.db.set_folder_sync_state(
+                    drive_id="__ROOT_FILES__",
+                    rel_path="__ROOT_FILES__",
+                    is_synced=is_synced,
+                )
+                continue
+
             rel_path = self._folder_paths.get(folder_id, "")
             if rel_path:
                 self.db.set_folder_sync_state(
@@ -201,14 +235,17 @@ class SelectiveSyncDialog(QDialog):
                 if not is_synced:
                     unselected_paths.append(rel_path)
 
-        # If user unchecked folders, remove their local copies to free disk space
-        for rel in unselected_paths:
-            local_folder = self.sync_dir / rel
-            if local_folder.exists() and local_folder.is_dir():
-                try:
-                    shutil.rmtree(str(local_folder))
-                except Exception as e:
-                    print(f"[SelectiveSync] Could not remove unchecked folder {local_folder}: {e}")
+        # Safely apply through sync_service if available
+        if self.sync_service:
+            self.sync_service.apply_selective_sync(unselected_paths, sync_root_files=sync_root_files)
+        else:
+            for rel in unselected_paths:
+                local_folder = self.sync_dir / rel
+                if local_folder.exists() and local_folder.is_dir():
+                    try:
+                        shutil.rmtree(str(local_folder), ignore_errors=True)
+                    except Exception as e:
+                        print(f"[SelectiveSync] Could not remove unchecked folder {local_folder}: {e}")
 
         QMessageBox.information(
             self,
