@@ -7,7 +7,7 @@ import signal
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from .config import AppConfig, APP_DISPLAY_NAME
 from .engine.sync_service import SyncService

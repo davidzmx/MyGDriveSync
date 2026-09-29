@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-APP_NAME="gdrive-sync"
+APP_NAME="mygdrivesync"
 VERSION="0.1.0"
 ARCH="amd64"
 PKG_DIR="build/deb/${APP_NAME}_${VERSION}_${ARCH}"
@@ -58,35 +58,39 @@ mkdir -p "$PKG_DIR/usr/share/applications"
 mkdir -p "$PKG_DIR/usr/share/icons/hicolor/256x256/apps"
 mkdir -p "$PKG_DIR/usr/share/kio/servicemenus"
 
-# Copiar bundle de la aplicación a /opt/gdrive-sync/
+# Copiar bundle de la aplicación a /opt/mygdrivesync/
 cp -r dist/$APP_NAME/* "$PKG_DIR/opt/$APP_NAME/"
 
-# Crear lanzador ejecutable en /usr/bin/
-cat << 'EOF' > "$PKG_DIR/usr/bin/gdrive-sync"
+# Crear lanzador ejecutable en /usr/bin/mygdrivesync
+cat << 'EOF' > "$PKG_DIR/usr/bin/mygdrivesync"
 #!/bin/sh
-exec /opt/gdrive-sync/gdrive-sync "$@"
+exec /opt/mygdrivesync/mygdrivesync "$@"
 EOF
-chmod 755 "$PKG_DIR/usr/bin/gdrive-sync"
+chmod 755 "$PKG_DIR/usr/bin/mygdrivesync"
 
-# Icono
+# Enlace simbolico de compatibilidad para gdrive-sync
+ln -sf /usr/bin/mygdrivesync "$PKG_DIR/usr/bin/gdrive-sync"
+
+# Iconos
+cp assets/gdrive-sync.png "$PKG_DIR/usr/share/icons/hicolor/256x256/apps/mygdrivesync.png"
 cp assets/gdrive-sync.png "$PKG_DIR/usr/share/icons/hicolor/256x256/apps/gdrive-sync.png"
 
 # Archivo de escritorio (KDE Launcher / Menú de aplicaciones)
-cat << 'EOF' > "$PKG_DIR/usr/share/applications/gdrive-sync.desktop"
+cat << 'EOF' > "$PKG_DIR/usr/share/applications/mygdrivesync.desktop"
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=Google Drive Sync
-GenericName=Cliente de sincronización de Google Drive
+Name=MyGDriveSync
+GenericName=Cliente Google Drive (tipo Dropbox)
 Comment=Sincronización bidireccional local tipo Dropbox para Google Drive
-Exec=/usr/bin/gdrive-sync
-Icon=gdrive-sync
+Exec=/usr/bin/mygdrivesync
+Icon=mygdrivesync
 Terminal=false
 Categories=Network;FileTransfer;Qt;
-Keywords=google;drive;sync;cloud;dropbox;
-StartupNotify=false
+Keywords=google;drive;sync;cloud;dropbox;mygdrivesync;
+StartupNotify=true
 EOF
-chmod 644 "$PKG_DIR/usr/share/applications/gdrive-sync.desktop"
+chmod 644 "$PKG_DIR/usr/share/applications/mygdrivesync.desktop"
 
 # Integración con Dolphin (KDE Service Menu a nivel de sistema)
 cat << 'EOF' > "$PKG_DIR/usr/share/kio/servicemenus/gdrive_sync_dolphin.desktop"
@@ -95,18 +99,18 @@ Type=Service
 ServiceTypes=KonqPopupMenu/Plugin
 MimeType=all/allfiles;inode/directory;
 Actions=openInGDriveWeb;copyGDriveLink;
-X-KDE-Submenu=Google Drive Sync
+X-KDE-Submenu=MyGDriveSync
 X-KDE-Priority=TopLevel
 
 [Desktop Action openInGDriveWeb]
 Name=Abrir en Google Drive (Web)
 Icon=internet-web-browser
-Exec=gdrive-sync-dolphin --open "%u"
+Exec=/usr/bin/mygdrivesync --dolphin-open "%u"
 
 [Desktop Action copyGDriveLink]
 Name=Copiar enlace web de Drive
 Icon=edit-copy
-Exec=gdrive-sync-dolphin --copy "%u"
+Exec=/usr/bin/mygdrivesync --dolphin-copy "%u"
 EOF
 chmod 644 "$PKG_DIR/usr/share/kio/servicemenus/gdrive_sync_dolphin.desktop"
 
@@ -119,7 +123,7 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: David <david@localhost>
 Depends: libc6, libgl1
-Description: Google Drive Sync Client
+Description: MyGDriveSync Client
  Cliente de sincronización en carpeta local estilo Dropbox para Google Drive.
  Incluye soporte de sincronización selectiva, icono dinámico en la bandeja
  del sistema (System Tray) e integración con el gestor de archivos KDE Dolphin.
@@ -135,11 +139,6 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache -q /usr/share/icons/hicolor || true
-fi
-if command -v kbuildsycoca6 >/dev/null 2>&1; then
-    kbuildsycoca6 --noincremental || true
-elif command -v kbuildsycoca5 >/dev/null 2>&1; then
-    kbuildsycoca5 --noincremental || true
 fi
 exit 0
 EOF
@@ -161,10 +160,14 @@ chmod 755 "$PKG_DIR/DEBIAN/postrm"
 echo "==> 5. Construyendo paquete .deb con dpkg-deb..."
 dpkg-deb --build --root-owner-group "$PKG_DIR" "$OUTPUT_DEB"
 
+# Copia de compatibilidad
+cp "$OUTPUT_DEB" "dist/gdrive-sync_0.1.0_amd64.deb"
+
 echo ""
 echo "======================================================================"
 echo " ¡Paquete Debian generado exitosamente!"
 echo " Ubicación: $OUTPUT_DEB"
+echo " (También disponible como dist/gdrive-sync_0.1.0_amd64.deb)"
 echo ""
 echo " Para instalarlo en tu sistema ejecuta:"
 echo "   sudo apt install ./$OUTPUT_DEB"
