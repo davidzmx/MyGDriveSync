@@ -36,6 +36,11 @@ sync_state.db
 settings.json
 token.json
 client_secrets.json
+client_secret*.json
+credentials.json
+*.credential
+*.key
+*.pem
 
 # Logs
 *.log
