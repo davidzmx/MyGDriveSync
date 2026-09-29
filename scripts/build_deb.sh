@@ -16,13 +16,13 @@ PKG_DIR="build/deb/${APP_NAME}_${VERSION}_${ARCH}"
 OUTPUT_DEB="dist/${APP_NAME}_${VERSION}_${ARCH}.deb"
 
 echo "==> 1. Verificando entorno virtual y dependencias..."
-if [ ! -d ".venv" ]; then
-    echo "Error: No se encontró .venv en $PROJECT_ROOT"
-    exit 1
+if [ -d ".venv" ]; then
+    PYTHON=".venv/bin/python3"
+    PYINSTALLER=".venv/bin/pyinstaller"
+else
+    PYTHON="$(which python3)"
+    PYINSTALLER="$(which pyinstaller)"
 fi
-
-PYTHON=".venv/bin/python3"
-PYINSTALLER=".venv/bin/pyinstaller"
 
 echo "==> 2. Generando icono de la aplicación..."
 mkdir -p assets
