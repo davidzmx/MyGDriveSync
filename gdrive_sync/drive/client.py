@@ -8,6 +8,7 @@ import io
 import mimetypes
 import os
 import shutil
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -23,15 +24,15 @@ class GoogleDriveClient:
 
     def __init__(self, credentials: Optional[Credentials] = None):
         self.credentials = credentials
-        self._service = None
-        if credentials:
-            self._service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+        self._local = threading.local()
 
     @property
     def service(self):
-        if self._service is None:
+        if not self.credentials:
             raise RuntimeError("GoogleDriveClient is not authenticated. Please log in first.")
-        return self._service
+        if not hasattr(self._local, "service") or self._local.service is None:
+            self._local.service = build("drive", "v3", credentials=self.credentials, cache_discovery=False)
+        return self._local.service
 
     def get_about(self) -> Dict[str, Any]:
         """Returns user info and storage quota."""

@@ -246,6 +246,99 @@ class SyncService(QObject):
             if not was_paused:
                 self.resume()
 
+    def download_newly_selected_folders(
+        self,
+        folder_ids: List[str],
+        sync_root_files: bool = False,
+    ) -> None:
+        """
+        Crawls and queues files for newly enabled selective sync folders and root files.
+        Runs in background thread so GUI remains responsive.
+        """
+        if not self.drive_client:
+            return
+
+        def _crawl_worker():
+            self.refresh_folder_cache()
+
+            for fid in folder_ids:
+                if fid == "__ROOT_FILES__":
+                    continue
+                try:
+                    # Also queue the folder itself
+                    meta = self.drive_client.get_file_metadata(fid)
+                    self._on_remote_change(meta)
+                    self._crawl_folder_recursive(fid)
+                except Exception as e:
+                    print(f"[SyncService] Error crawling folder {fid}: {e}")
+
+            if sync_root_files:
+                try:
+                    self._crawl_root_files()
+                except Exception as e:
+                    print(f"[SyncService] Error crawling root files: {e}")
+
+        t = threading.Thread(target=_crawl_worker, name="SelectiveSyncCrawler", daemon=True)
+        t.start()
+
+    def _crawl_folder_recursive(self, folder_id: str) -> None:
+        """Recursively lists all files in a folder and queues them for download."""
+        if not self.drive_client:
+            return
+
+        page_token = None
+        q = f"'{folder_id}' in parents and trashed = false"
+
+        while True:
+            res = self.drive_client.service.files().list(
+                q=q,
+                spaces="drive",
+                fields="nextPageToken, files(id, name, mimeType, trashed, parents, md5Checksum, size, modifiedTime)",
+                pageToken=page_token,
+                pageSize=1000,
+            ).execute()
+
+            files = res.get("files", [])
+            for f in files:
+                self._on_remote_change(f)
+                if f.get("mimeType") == "application/vnd.google-apps.folder":
+                    self._crawl_folder_recursive(f["id"])
+
+            page_token = res.get("nextPageToken")
+            if not page_token:
+                break
+
+    def _crawl_root_files(self) -> None:
+        """Lists and queues active files directly in the root of Google Drive."""
+        if not self.drive_client:
+            return
+
+        root_id = "root"
+        try:
+            root_res = self.drive_client.service.files().get(fileId="root", fields="id").execute()
+            root_id = root_res.get("id", "root")
+        except Exception:
+            pass
+
+        q = f"('{root_id}' in parents or 'root' in parents) and mimeType != 'application/vnd.google-apps.folder' and trashed = false"
+        page_token = None
+
+        while True:
+            res = self.drive_client.service.files().list(
+                q=q,
+                spaces="drive",
+                fields="nextPageToken, files(id, name, mimeType, trashed, parents, md5Checksum, size, modifiedTime)",
+                pageToken=page_token,
+                pageSize=1000,
+            ).execute()
+
+            for f in res.get("files", []):
+                self._on_remote_change(f)
+
+            page_token = res.get("nextPageToken")
+            if not page_token:
+                break
+
     # -------------------------------------------------------------------------
     # Internal Event Handlers
     # -------------------------------------------------------------------------

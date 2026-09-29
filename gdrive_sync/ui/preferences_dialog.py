@@ -270,18 +270,42 @@ class PreferencesDialog(QDialog):
             if self.sync_service:
                 self.sync_service.initialize()
                 self.drive_client = self.sync_service.drive_client
-                self.sync_service.start()
             elif not self.drive_client:
                 creds = self.oauth.get_valid_credentials()
                 if creds:
                     self.drive_client = GoogleDriveClient(creds)
 
             self._refresh_account_info()
-            QMessageBox.information(
-                self,
-                "Sesión iniciada",
-                "¡Cuenta de Google Drive vinculada con éxito!\nLa sincronización ha comenzado.",
-            )
+
+            # Check if selective sync has already been configured
+            has_rules = bool(self.sync_service and self.sync_service.db.get_all_sync_folders())
+
+            if not has_rules:
+                QMessageBox.information(
+                    self,
+                    "Sesión iniciada con éxito",
+                    "¡Cuenta de Google Drive vinculada con éxito!\n\n"
+                    "A continuación, selecciona qué carpetas deseas sincronizar en este equipo.",
+                )
+                from .selective_sync_dialog import SelectiveSyncDialog
+                sel_dialog = SelectiveSyncDialog(
+                    db=self.sync_service.db if self.sync_service else None,
+                    drive_client=self.drive_client,
+                    sync_dir=self.config.sync_dir,
+                    sync_service=self.sync_service,
+                    parent=self,
+                )
+                sel_dialog.exec()
+                if self.sync_service:
+                    self.sync_service.start()
+            else:
+                if self.sync_service:
+                    self.sync_service.start()
+                QMessageBox.information(
+                    self,
+                    "Sesión iniciada",
+                    "¡Cuenta de Google Drive vinculada con éxito!\nLa sincronización está activa.",
+                )
         except Exception as e:
             QMessageBox.critical(self, "Error de autenticación", str(e))
 

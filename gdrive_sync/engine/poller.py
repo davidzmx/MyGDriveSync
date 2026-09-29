@@ -74,6 +74,14 @@ class CloudPoller:
         if not page_token:
             # First run: acquire start token for future deltas
             start_token = self.client.get_start_page_token()
+            self.db.set_kv("start_page_token", start_token)
+
+            # Check if selective sync has been configured
+            sync_folders = self.db.get_all_sync_folders()
+            if not sync_folders:
+                # Do not download everything blindly if selective sync not configured yet
+                return
+
             # Crawl all existing files and folders in Google Drive
             try:
                 initial_files = self.client.list_all_files()
@@ -82,7 +90,6 @@ class CloudPoller:
             except Exception as e:
                 print(f"[CloudPoller] Error during initial files crawl: {e}")
 
-            self.db.set_kv("start_page_token", start_token)
             return
 
         changes, new_token = self.client.list_changes(page_token)

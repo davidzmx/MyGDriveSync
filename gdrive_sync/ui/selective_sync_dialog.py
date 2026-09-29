@@ -166,8 +166,8 @@ class SelectiveSyncDialog(QDialog):
                     item.setData(0, Qt.UserRole, child["id"])
                     item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
 
-                    # Determine initial checked state: use existing rule if present
-                    is_synced = existing_rules.get(child["id"], True if not existing_rules else False)
+                    # Determine initial checked state: use existing rule if present, else False (unchecked by default)
+                    is_synced = existing_rules.get(child["id"], False)
                     item.setCheckState(0, Qt.Checked if is_synced else Qt.Unchecked)
 
                     self._items_by_id[child["id"]] = item
@@ -210,20 +210,31 @@ class SelectiveSyncDialog(QDialog):
         self.tree.blockSignals(False)
 
     def _save_changes(self):
-        """Applies selective sync rules and frees local space for unchecked folders."""
+        """Applies selective sync rules, cleans unselected, and downloads newly selected."""
+        existing_folders = {f.drive_id: f.is_synced for f in self.db.get_all_sync_folders()}
+
         unselected_paths: List[str] = []
+        newly_selected_ids: List[str] = []
         sync_root_files = False
+        newly_selected_root_files = False
 
         for folder_id, item in self._items_by_id.items():
             is_synced = item.checkState(0) == Qt.Checked
             if folder_id == "__ROOT_FILES__":
                 sync_root_files = is_synced
+                was_synced = existing_folders.get("__ROOT_FILES__", False)
+                if is_synced and not was_synced:
+                    newly_selected_root_files = True
                 self.db.set_folder_sync_state(
                     drive_id="__ROOT_FILES__",
                     rel_path="__ROOT_FILES__",
                     is_synced=is_synced,
                 )
                 continue
+
+            was_synced = existing_folders.get(folder_id, False)
+            if is_synced and not was_synced:
+                newly_selected_ids.append(folder_id)
 
             rel_path = self._folder_paths.get(folder_id, "")
             if rel_path:
@@ -235,7 +246,7 @@ class SelectiveSyncDialog(QDialog):
                 if not is_synced:
                     unselected_paths.append(rel_path)
 
-        # Safely apply through sync_service if available
+        # 1. Safely apply deletions through sync_service if available
         if self.sync_service:
             self.sync_service.apply_selective_sync(unselected_paths, sync_root_files=sync_root_files)
         else:
@@ -246,6 +257,13 @@ class SelectiveSyncDialog(QDialog):
                         shutil.rmtree(str(local_folder), ignore_errors=True)
                     except Exception as e:
                         print(f"[SelectiveSync] Could not remove unchecked folder {local_folder}: {e}")
+
+        # 2. Trigger crawl and download for newly selected folders
+        if self.sync_service and (newly_selected_ids or newly_selected_root_files):
+            self.sync_service.download_newly_selected_folders(
+                folder_ids=newly_selected_ids,
+                sync_root_files=newly_selected_root_files,
+            )
 
         QMessageBox.information(
             self,
