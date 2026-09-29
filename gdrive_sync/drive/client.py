@@ -41,6 +41,14 @@ class GoogleDriveClient:
         ).execute()
         return res
 
+    def get_root_id(self) -> str:
+        """Returns the actual Google Drive ID of the user's My Drive root folder."""
+        try:
+            res = self.service.files().get(fileId="root", fields="id").execute()
+            return res.get("id", "root")
+        except Exception:
+            return "root"
+
     # -------------------------------------------------------------------------
     # Selective Sync / Folder Tree Discovery
     # -------------------------------------------------------------------------

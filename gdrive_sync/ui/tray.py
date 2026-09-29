@@ -176,7 +176,7 @@ class GDriveTrayIcon(QSystemTrayIcon):
 
     def _open_activity(self):
         if not self._act_dialog or not self._act_dialog.isVisible():
-            self._act_dialog = ActivityDialog(db=self.db)
+            self._act_dialog = ActivityDialog(db=self.db, sync_service=self.service)
             self._act_dialog.show()
         else:
             self._act_dialog.raise_()

@@ -472,7 +472,10 @@ class SyncService(QObject):
         """
         root_id = "root"
         if self.drive_client:
-            root_id = self.drive_client.get_root_id() or "root"
+            try:
+                root_id = self.drive_client.get_root_id() or "root"
+            except Exception:
+                root_id = "root"
 
         if "/" not in rel_path:
             return root_id
