@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & Linters
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local Database & User State
+*.db
+*.sqlite
+sync_state.db
+settings.json
+token.json
+client_secrets.json
+
+# Logs
+*.log
+
+# PyInstaller / Build artifacts
+*.spec.bak
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+.directory
+
+# IDEs
+.idea/
+.vscode/
