@@ -82,6 +82,11 @@ class GDriveTrayIcon(QSystemTrayIcon):
         self.action_preferences.triggered.connect(self._open_preferences)
         self.menu.addAction(self.action_preferences)
 
+        # About
+        self.action_about = QAction("ℹ️ Acerca de MyGDriveSync...", self)
+        self.action_about.triggered.connect(self._show_about)
+        self.menu.addAction(self.action_about)
+
         self.menu.addSeparator()
 
         # Exit
@@ -99,6 +104,7 @@ class GDriveTrayIcon(QSystemTrayIcon):
 
     def update_state(self, state: str):
         """Updates icon and status description."""
+        from .. import __version__
         self._current_state = state
         self.setIcon(create_tray_icon(state))
 
@@ -111,8 +117,8 @@ class GDriveTrayIcon(QSystemTrayIcon):
             "STOPPED": "Detenido",
         }
         desc = desc_map.get(state, state)
-        self.action_status.setText(f"MyGDriveSync: {desc}")
-        self.setToolTip(f"MyGDriveSync - {desc}")
+        self.action_status.setText(f"MyGDriveSync v{__version__}: {desc}")
+        self.setToolTip(f"MyGDriveSync v{__version__} - {desc}")
 
         if state == "PAUSED":
             self.action_pause.setText("▶ Reanudar sincronización")
@@ -190,6 +196,19 @@ class GDriveTrayIcon(QSystemTrayIcon):
     def _on_progress_updated(self, filename: str, done: int, total: int):
         if self._act_dialog and self._act_dialog.isVisible():
             self._act_dialog.update_active_progress(filename, done, total)
+
+    def _show_about(self):
+        from .. import __version__
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.about(
+            None,
+            "Acerca de MyGDriveSync",
+            f"<h3>MyGDriveSync</h3>"
+            f"<p><b>Versión:</b> {__version__}</p>"
+            f"<p>Cliente local de sincronización bidireccional tipo Dropbox para Google Drive.</p>"
+            f"<p><b>Plataformas soportadas:</b> Linux (Debian, Ubuntu, AppImage), Windows (.exe) y macOS (.dmg)</p>"
+            f"<p><a href='https://github.com/davidzmx/MyGDriveSync'>github.com/davidzmx/MyGDriveSync</a></p>",
+        )
 
     def _quit(self):
         self.service.stop()

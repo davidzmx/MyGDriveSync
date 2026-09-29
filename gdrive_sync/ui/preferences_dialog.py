@@ -48,13 +48,16 @@ class PreferencesDialog(QDialog):
         self.oauth = oauth or (sync_service.oauth if sync_service else OAuthManager(config))
         self.drive_client = drive_client or (sync_service.drive_client if sync_service else None)
 
-        self.setWindowTitle("Preferencias - MyGDriveSync")
+        from .. import __version__
+
+        self.setWindowTitle(f"Preferencias - MyGDriveSync v{__version__}")
         self.resize(540, 420)
 
         self._setup_ui()
         self._load_values()
 
     def _setup_ui(self):
+        from .. import __version__
         main_layout = QVBoxLayout(self)
 
         self.tabs = QTabWidget()
@@ -70,8 +73,11 @@ class PreferencesDialog(QDialog):
         self._setup_account_tab()
         self.tabs.addTab(self.tab_account, "Cuenta de Google")
 
-        # Bottom buttons
+        # Bottom layout with version label
         btn_layout = QHBoxLayout()
+        lbl_version = QLabel(f"MyGDriveSync v{__version__}")
+        lbl_version.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        btn_layout.addWidget(lbl_version)
         btn_layout.addStretch()
 
         self.btn_cancel = QPushButton("Cancelar")

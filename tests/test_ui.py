@@ -71,6 +71,7 @@ class TestUIComponents(unittest.TestCase):
         tray = GDriveTrayIcon(self.service)
         self.assertIsNotNone(tray)
         self.assertIsNotNone(tray.contextMenu())
+        self.assertIsNotNone(tray.action_about)
 
 
 if __name__ == "__main__":
