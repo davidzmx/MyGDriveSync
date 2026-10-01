@@ -39,11 +39,12 @@ hiddenimports = [
     'googleapiclient.http',
     'google_auth_oauthlib',
     'google.auth.transport.requests',
+    'unittest',
+    'pyparsing',
 ]
 
 excludes = [
     'tkinter',
-    'unittest',
     'pytest',
     'PySide6.QtWebEngineCore',
     'PySide6.QtWebEngineWidgets',
