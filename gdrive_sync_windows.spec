@@ -38,9 +38,12 @@ hiddenimports = [
     'googleapiclient.discovery',
     'googleapiclient.http',
     'google_auth_oauthlib',
+    'google_auth_oauthlib.flow',
     'google.auth.transport.requests',
     'unittest',
     'pyparsing',
+    'wsgiref',
+    'wsgiref.simple_server',
 ]
 
 excludes = [
