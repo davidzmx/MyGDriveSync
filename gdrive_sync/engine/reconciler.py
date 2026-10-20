@@ -72,6 +72,13 @@ class Reconciler:
 
         return (TaskType.UPLOAD, priority, {"size": size, "md5": local_md5})
 
+    GOOGLE_DOCS_EXT_MAP: Dict[str, str] = {
+        "application/vnd.google-apps.document": ".docx",
+        "application/vnd.google-apps.spreadsheet": ".xlsx",
+        "application/vnd.google-apps.presentation": ".pptx",
+        "application/vnd.google-apps.drawing": ".png",
+    }
+
     @staticmethod
     def resolve_remote_change(
         file_meta: Dict[str, Any],
@@ -81,19 +88,19 @@ class Reconciler:
     ) -> Optional[Tuple[str, TaskPriority, Dict[str, Any]]]:
         """
         Determines the task needed when a remote file change is detected from Google Drive.
-        Handles conflict detection and creates conflict copy if both were modified.
+        Handles conflict detection, Google Docs formats, and avoids unnecessary re-downloads.
         """
         drive_id = file_meta.get("id")
         remote_md5 = file_meta.get("md5Checksum")
+        remote_mtime = file_meta.get("modifiedTime")
         mime_type = file_meta.get("mimeType", "")
         is_folder = mime_type == "application/vnd.google-apps.folder"
 
         norm_path = SyncItem.normalize_path(rel_path)
-        full_path = sync_dir / norm_path
         existing = db.get_item_by_drive_id(drive_id) or db.get_item_by_path(norm_path)
 
         if is_folder:
-            # Folder ensure exists locally
+            full_path = sync_dir / norm_path
             full_path.mkdir(parents=True, exist_ok=True)
             db.upsert_item(
                 SyncItem(
@@ -105,20 +112,38 @@ class Reconciler:
             )
             return None
 
+        # Determine target relative path (accounting for Google Docs automatic file extension)
+        target_rel = norm_path
+        if existing and existing.rel_path:
+            target_rel = existing.rel_path
+        elif mime_type in Reconciler.GOOGLE_DOCS_EXT_MAP:
+            ext = Reconciler.GOOGLE_DOCS_EXT_MAP[mime_type]
+            if not target_rel.lower().endswith(ext):
+                target_rel = target_rel + ext
+
+        full_path = sync_dir / target_rel
+
         # Check local state
         if full_path.exists():
             local_md5 = calculate_md5(full_path)
 
-            if remote_md5 and local_md5 == remote_md5:
+            is_google_doc = mime_type.startswith("application/vnd.google-apps.")
+
+            # For Google Docs/Sheets: no remote md5Checksum is provided by Google Drive.
+            # We compare modifiedTime against mtime_remote in database.
+            if is_google_doc:
+                if existing and existing.status == SyncStatus.SYNCED and existing.mtime_remote == remote_mtime:
+                    return None
+            elif remote_md5 and local_md5 == remote_md5:
                 # Content is identical, mark as synced
                 db.upsert_item(
                     SyncItem(
-                        rel_path=norm_path,
+                        rel_path=target_rel,
                         item_type=ItemType.FILE,
                         drive_id=drive_id,
                         size=full_path.stat().st_size,
                         mtime_local=full_path.stat().st_mtime,
-                        mtime_remote=file_meta.get("modifiedTime"),
+                        mtime_remote=remote_mtime,
                         md5_checksum=remote_md5,
                         status=SyncStatus.SYNCED,
                     )
@@ -153,14 +178,14 @@ class Reconciler:
 
         db.upsert_item(
             SyncItem(
-                rel_path=norm_path,
+                rel_path=target_rel,
                 item_type=ItemType.FILE,
                 drive_id=drive_id,
                 size=size,
-                mtime_remote=file_meta.get("modifiedTime"),
+                mtime_remote=remote_mtime,
                 md5_checksum=remote_md5,
                 status=SyncStatus.QUEUED_DOWNLOAD,
             )
         )
 
-        return (TaskType.DOWNLOAD, priority, {"file_meta": file_meta})
+        return (TaskType.DOWNLOAD, priority, {"file_meta": file_meta, "target_rel": target_rel})

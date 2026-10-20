@@ -14,6 +14,7 @@ from PySide6.QtCore import QObject, Signal
 from .poller import CloudPoller
 from .queue import SyncQueue, SyncTask, TaskPriority, TaskType
 from .reconciler import Reconciler
+from .utils import calculate_md5, is_ignored_filename
 from .watcher import LocalFileWatcher
 from ..auth.oauth import OAuthManager
 from ..config import AppConfig
@@ -139,6 +140,13 @@ class SyncService(QObject):
             )
             self.poller.start()
 
+            # 4. Start background scan for any offline/unmonitored local changes
+            threading.Thread(
+                target=self.scan_local_changes,
+                name="StartupLocalScanner",
+                daemon=True,
+            ).start()
+
             if pending_items:
                 self.status_changed.emit("SYNCING")
             else:
@@ -177,8 +185,122 @@ class SyncService(QObject):
         if self.queue:
             self.queue.resume()
         self.status_changed.emit("IDLE")
+        self.trigger_sync()
+
+    def trigger_sync(self) -> None:
+        """Triggers immediate sync of cloud updates and local offline files."""
         if self.poller:
             self.poller.trigger_now()
+        threading.Thread(
+            target=self.scan_local_changes,
+            name="ManualLocalScanner",
+            daemon=True,
+        ).start()
+
+    def scan_local_changes(self) -> None:
+        """
+        Scans local folders for changes (new, modified, or deleted files)
+        that occurred while the app was closed or offline.
+        """
+        if not self.config.sync_dir.exists() or not self.queue:
+            return
+
+        sync_root = self.config.sync_dir.resolve()
+        has_changes = False
+
+        # 1. Walk local filesystem for new or modified files
+        try:
+            for path in sync_root.rglob("*"):
+                if not path.is_file():
+                    continue
+
+                try:
+                    rel = str(path.relative_to(sync_root)).replace("\\", "/")
+                except ValueError:
+                    continue
+
+                parts = rel.split("/")
+                if any(is_ignored_filename(part) for part in parts):
+                    continue
+
+                if not self.db.is_path_selected_for_sync(rel):
+                    continue
+
+                existing = self.db.get_item_by_path(rel)
+                if not existing:
+                    decision = Reconciler.resolve_local_change(
+                        rel_path=rel,
+                        event_type="created",
+                        sync_dir=self.config.sync_dir,
+                        db=self.db,
+                    )
+                    if decision:
+                        task_type, priority, extra = decision
+                        self.queue.add_task(
+                            task_type=task_type,
+                            rel_path=rel,
+                            priority=priority,
+                            extra=extra,
+                        )
+                        has_changes = True
+                elif existing.status == SyncStatus.SYNCED:
+                    try:
+                        st = path.stat()
+                        if st.st_size != existing.size or abs(st.st_mtime - (existing.mtime_local or 0)) > 1.0:
+                            local_md5 = calculate_md5(path)
+                            if local_md5 and local_md5 != existing.md5_checksum:
+                                decision = Reconciler.resolve_local_change(
+                                    rel_path=rel,
+                                    event_type="modified",
+                                    sync_dir=self.config.sync_dir,
+                                    db=self.db,
+                                )
+                                if decision:
+                                    task_type, priority, extra = decision
+                                    self.queue.add_task(
+                                        task_type=task_type,
+                                        rel_path=rel,
+                                        priority=priority,
+                                        drive_id=existing.drive_id,
+                                        extra=extra,
+                                    )
+                                    has_changes = True
+                    except OSError:
+                        pass
+        except Exception as e:
+            print(f"[SyncService] Error during local files scan: {e}")
+
+        # 2. Check for items deleted locally while offline
+        try:
+            synced_items = self.db.list_items(status=SyncStatus.SYNCED, limit=5000)
+            for item in synced_items:
+                if item.item_type == ItemType.FOLDER:
+                    continue
+                if not self.db.is_path_selected_for_sync(item.rel_path):
+                    continue
+                local_file = sync_root / item.rel_path
+                if not local_file.exists():
+                    decision = Reconciler.resolve_local_change(
+                        rel_path=item.rel_path,
+                        event_type="deleted",
+                        sync_dir=self.config.sync_dir,
+                        db=self.db,
+                    )
+                    if decision:
+                        task_type, priority, extra = decision
+                        self.queue.add_task(
+                            task_type=task_type,
+                            rel_path=item.rel_path,
+                            priority=priority,
+                            drive_id=item.drive_id,
+                            extra=extra,
+                        )
+                        has_changes = True
+        except Exception as e:
+            print(f"[SyncService] Error checking deleted local files: {e}")
+
+        if has_changes:
+            self.status_changed.emit("SYNCING")
 
     def apply_selective_sync(self, unselected_paths: List[str], sync_root_files: bool = True) -> None:
         """
@@ -396,9 +518,10 @@ class SyncService(QObject):
         )
         if decision:
             task_type, priority, extra = decision
+            task_rel = extra.get("target_rel", rel_path)
             self.queue.add_task(
                 task_type=task_type,
-                rel_path=rel_path,
+                rel_path=task_rel,
                 priority=priority,
                 drive_id=drive_id,
                 extra=extra,
@@ -559,14 +682,22 @@ class SyncService(QObject):
         def on_prog(done: int, total: int):
             self.progress_updated.emit(full_path.name, done, total)
 
+        anticipated_paths = {task.rel_path}
+        if mime_type and hasattr(self.drive_client, "GOOGLE_DOCS_EXPORT_MAP"):
+            if mime_type in self.drive_client.GOOGLE_DOCS_EXPORT_MAP:
+                _, def_ext = self.drive_client.GOOGLE_DOCS_EXPORT_MAP[mime_type]
+                if not task.rel_path.lower().endswith(def_ext):
+                    anticipated_paths.add(task.rel_path + def_ext)
+
         if self.watcher:
-            self.watcher.mark_internal_operation(task.rel_path)
+            for p in anticipated_paths:
+                self.watcher.mark_internal_operation(p)
 
         actual_path = full_path
         try:
             file_meta = task.extra_data.get("file_meta", {})
             mime_type = file_meta.get("mimeType")
-            if not mime_type and task.drive_id:
+            if not mime_type and task.drive_id and self.drive_client:
                 try:
                     meta = self.drive_client.get_file_metadata(task.drive_id)
                     mime_type = meta.get("mimeType")
@@ -580,11 +711,18 @@ class SyncService(QObject):
                 mime_type=mime_type,
             )
             rel_path = str(actual_path.relative_to(self.config.sync_dir)).replace("\\", "/")
-            if self.watcher and rel_path != task.rel_path:
+            if self.watcher and rel_path not in anticipated_paths:
                 self.watcher.mark_internal_operation(rel_path)
 
             file_size = actual_path.stat().st_size if actual_path.exists() else 0
             mtime_loc = actual_path.stat().st_mtime if actual_path.exists() else 0
+
+            # For exported Google Docs (no md5 checksum provided remotely),
+            # calculate local md5 so local watcher recognizes it as synced.
+            stored_md5 = file_meta.get("md5Checksum")
+            if not stored_md5 and actual_path.exists() and actual_path.is_file():
+                stored_md5 = calculate_md5(actual_path)
+
             item = SyncItem(
                 rel_path=rel_path,
                 item_type=ItemType.FILE,
@@ -592,18 +730,24 @@ class SyncService(QObject):
                 size=file_size,
                 mtime_local=mtime_loc,
                 mtime_remote=file_meta.get("modifiedTime"),
-                md5_checksum=file_meta.get("md5Checksum"),
+                md5_checksum=stored_md5,
                 status=SyncStatus.SYNCED,
             )
             self.db.upsert_item(item)
+
+            # If the downloaded file name had an extension appended (Google Docs),
+            # clean up any old DB row that had the raw name without extension
+            if rel_path != task.rel_path:
+                self.db.delete_item_by_path(task.rel_path)
+
             self.file_synced.emit(rel_path, "Descargado")
         finally:
             if self.watcher:
-                self.watcher.unmark_internal_operation(task.rel_path)
+                for p in anticipated_paths:
+                    self.watcher.unmark_internal_operation(p)
                 try:
                     other_rel = str(actual_path.relative_to(self.config.sync_dir)).replace("\\", "/")
-                    if other_rel != task.rel_path:
-                        self.watcher.unmark_internal_operation(other_rel)
+                    self.watcher.unmark_internal_operation(other_rel)
                 except Exception:
                     pass
 

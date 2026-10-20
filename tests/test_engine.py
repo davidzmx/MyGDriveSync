@@ -114,5 +114,64 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(executed_tasks[1], "LOW_TASK")
 
 
+    def test_reconciler_google_docs_export_and_idempotence(self):
+        # Scenario 1: First time seeing a Google Docs file (no extension remotely)
+        doc_meta = {
+            "id": "gdoc-12345",
+            "name": "Documento de Prueba",
+            "mimeType": "application/vnd.google-apps.document",
+            "modifiedTime": "2026-10-20T10:00:00Z",
+        }
+
+        res = Reconciler.resolve_remote_change(
+            file_meta=doc_meta,
+            rel_path="Documento de Prueba",
+            sync_dir=self.sync_dir,
+            db=self.db,
+        )
+        self.assertIsNotNone(res)
+        task_type, priority, extra = res
+        self.assertEqual(task_type, TaskType.DOWNLOAD)
+        # Should target .docx automatically
+        self.assertEqual(extra.get("target_rel"), "Documento de Prueba.docx")
+
+        # Simulate that it was downloaded and saved into DB with .docx
+        local_docx = self.sync_dir / "Documento de Prueba.docx"
+        local_docx.write_text("Exported Word content", encoding="utf-8")
+        local_md5 = calculate_md5(local_docx)
+
+        self.db.upsert_item(
+            SyncItem(
+                rel_path="Documento de Prueba.docx",
+                item_type=ItemType.FILE,
+                drive_id="gdoc-12345",
+                size=local_docx.stat().st_size,
+                mtime_remote="2026-10-20T10:00:00Z",
+                md5_checksum=local_md5,
+                status=SyncStatus.SYNCED,
+            )
+        )
+
+        # Scenario 2: Poller sees Google Docs again with unchanged modifiedTime
+        res2 = Reconciler.resolve_remote_change(
+            file_meta=doc_meta,
+            rel_path="Documento de Prueba",
+            sync_dir=self.sync_dir,
+            db=self.db,
+        )
+        # MUST return None: already up to date, do NOT re-download!
+        self.assertIsNone(res2)
+
+        # Scenario 3: Local watcher event for the downloaded .docx file
+        res_local = Reconciler.resolve_local_change(
+            rel_path="Documento de Prueba.docx",
+            event_type="created",
+            sync_dir=self.sync_dir,
+            db=self.db,
+        )
+        # MUST return None: local file MD5 matches what's in DB, do NOT re-upload!
+        self.assertIsNone(res_local)
+
+
 if __name__ == "__main__":
     unittest.main()

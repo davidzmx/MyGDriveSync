@@ -79,13 +79,18 @@ class ActivityDialog(QDialog):
         btn_layout.addStretch()
 
         self.btn_refresh = QPushButton("Actualizar historial")
-        self.btn_refresh.clicked.connect(self.refresh_history)
+        self.btn_refresh.clicked.connect(self._on_refresh_clicked)
         self.btn_close = QPushButton("Cerrar")
         self.btn_close.clicked.connect(self.accept)
 
         btn_layout.addWidget(self.btn_refresh)
         btn_layout.addWidget(self.btn_close)
         layout.addLayout(btn_layout)
+
+    def _on_refresh_clicked(self):
+        if self.sync_service and hasattr(self.sync_service, "trigger_sync"):
+            self.sync_service.trigger_sync()
+        self.refresh_history()
 
     def _on_cell_double_clicked(self, row: int, col: int):
         path_item = self.table.item(row, 0)

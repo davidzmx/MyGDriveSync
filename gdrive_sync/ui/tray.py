@@ -145,7 +145,9 @@ class GDriveTrayIcon(QSystemTrayIcon):
             self.service.pause()
 
     def _sync_now(self):
-        if self.service.poller:
+        if hasattr(self.service, "trigger_sync"):
+            self.service.trigger_sync()
+        elif self.service.poller:
             self.service.poller.trigger_now()
 
     def _open_selective_sync(self):
