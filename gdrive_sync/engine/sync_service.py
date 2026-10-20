@@ -682,6 +682,16 @@ class SyncService(QObject):
         def on_prog(done: int, total: int):
             self.progress_updated.emit(full_path.name, done, total)
 
+        file_meta = task.extra_data.get("file_meta", {})
+        mime_type = file_meta.get("mimeType")
+        if not mime_type and task.drive_id and self.drive_client:
+            try:
+                meta = self.drive_client.get_file_metadata(task.drive_id)
+                mime_type = meta.get("mimeType")
+                file_meta.update(meta)
+            except Exception:
+                pass
+
         anticipated_paths = {task.rel_path}
         if mime_type and hasattr(self.drive_client, "GOOGLE_DOCS_EXPORT_MAP"):
             if mime_type in self.drive_client.GOOGLE_DOCS_EXPORT_MAP:
@@ -695,15 +705,6 @@ class SyncService(QObject):
 
         actual_path = full_path
         try:
-            file_meta = task.extra_data.get("file_meta", {})
-            mime_type = file_meta.get("mimeType")
-            if not mime_type and task.drive_id and self.drive_client:
-                try:
-                    meta = self.drive_client.get_file_metadata(task.drive_id)
-                    mime_type = meta.get("mimeType")
-                    file_meta.update(meta)
-                except Exception:
-                    pass
             actual_path = self.drive_client.download_file(
                 drive_id=task.drive_id,
                 dest_local_path=full_path,

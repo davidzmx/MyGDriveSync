@@ -150,26 +150,36 @@ class Reconciler:
                 )
                 return None
 
-            # Content differs! Check if local was modified concurrently (Conflict)
+            # If the file is currently being uploaded or in queue to upload:
             if existing and existing.status in (SyncStatus.QUEUED_UPLOAD, SyncStatus.UPLOADING):
-                # CONFLICT DETECTED!
-                # Preserve local version with conflict filename
-                timestamp_str = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-                conflict_name = f"{full_path.stem} (Conflicto de copia {timestamp_str}){full_path.suffix}"
-                conflict_path = full_path.parent / conflict_name
-                shutil.copy2(str(full_path), str(conflict_path))
+                raw_remote_size = file_meta.get("size")
+                remote_size = int(raw_remote_size) if raw_remote_size is not None else -1
+                local_size = full_path.stat().st_size
 
-                # Queue the conflict copy to be uploaded so changes aren't lost
-                conflict_rel = SyncItem.normalize_path(str(conflict_path.relative_to(sync_dir)))
-                db.upsert_item(
-                    SyncItem(
-                        rel_path=conflict_rel,
-                        item_type=ItemType.FILE,
-                        size=conflict_path.stat().st_size,
-                        mtime_local=conflict_path.stat().st_mtime,
-                        status=SyncStatus.QUEUED_UPLOAD,
+                # If MD5 matches or remote MD5 not yet computed and file sizes match, it's our upload echo!
+                if (remote_md5 and remote_md5 == local_md5) or (not remote_md5 and (remote_size == local_size or remote_size <= 0)):
+                    if not existing.drive_id or existing.drive_id != drive_id:
+                        existing.drive_id = drive_id
+                        db.upsert_item(existing)
+                    return None
+
+                # Genuine conflict: remote MD5 exists and is definitively DIFFERENT from local MD5
+                if remote_md5 and local_md5 and remote_md5 != local_md5:
+                    timestamp_str = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+                    conflict_name = f"{full_path.stem} (Conflicto de copia {timestamp_str}){full_path.suffix}"
+                    conflict_path = full_path.parent / conflict_name
+                    shutil.copy2(str(full_path), str(conflict_path))
+
+                    conflict_rel = SyncItem.normalize_path(str(conflict_path.relative_to(sync_dir)))
+                    db.upsert_item(
+                        SyncItem(
+                            rel_path=conflict_rel,
+                            item_type=ItemType.FILE,
+                            size=conflict_path.stat().st_size,
+                            mtime_local=conflict_path.stat().st_mtime,
+                            status=SyncStatus.QUEUED_UPLOAD,
+                        )
                     )
-                )
 
         # Queue download of the remote version
         raw_size = file_meta.get("size")

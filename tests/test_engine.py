@@ -172,6 +172,44 @@ class TestEngine(unittest.TestCase):
         # MUST return None: local file MD5 matches what's in DB, do NOT re-upload!
         self.assertIsNone(res_local)
 
+    def test_reconciler_upload_echo_no_conflict(self):
+        # Scenario: User downloads a 48MB zip file locally
+        zip_file = self.sync_dir / "installer.zip"
+        zip_file.write_bytes(b"PK\x03\x04" + b"0" * 1024)
+        local_md5 = calculate_md5(zip_file)
+
+        # It gets queued and marked as UPLOADING
+        self.db.upsert_item(
+            SyncItem(
+                rel_path="installer.zip",
+                item_type=ItemType.FILE,
+                size=zip_file.stat().st_size,
+                mtime_local=zip_file.stat().st_mtime,
+                md5_checksum=local_md5,
+                status=SyncStatus.UPLOADING,
+            )
+        )
+
+        # While uploading, Google Drive Change API sends back the file event with matching size
+        remote_meta = {
+            "id": "new-drive-id-123",
+            "name": "installer.zip",
+            "md5Checksum": None,  # Checksum might not be computed yet while chunking
+            "size": zip_file.stat().st_size,
+            "modifiedTime": "2026-10-20T12:00:00Z",
+        }
+
+        res = Reconciler.resolve_remote_change(
+            file_meta=remote_meta,
+            rel_path="installer.zip",
+            sync_dir=self.sync_dir,
+            db=self.db,
+        )
+        # Must NOT generate a conflict file!
+        self.assertIsNone(res)
+        conflict_files = list(self.sync_dir.glob("installer (Conflicto *).zip"))
+        self.assertEqual(len(conflict_files), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
