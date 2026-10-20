@@ -5,7 +5,7 @@ Recent sync activity and transfers monitor dialog.
 from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QKeySequence, QAction
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from ..database.manager import DatabaseManager
 from ..database.models import SyncStatus
+from ..engine.queue import TaskPriority, TaskType
 
 
 class ActivityDialog(QDialog):
@@ -217,13 +218,28 @@ class ActivityDialog(QDialog):
         dlg.exec()
 
     def _retry_single_item(self, rel_path: str):
-        full_path = (self.sync_service.config.sync_dir / rel_path) if self.sync_service else None
+        if not self.sync_service:
+            return
+        it = self.db.get_item_by_path(rel_path)
+        full_path = self.sync_service.config.sync_dir / rel_path
         if full_path and full_path.exists():
             self.sync_service.queue.add_task(
-                task_type="upload",
+                task_type=TaskType.UPLOAD,
                 rel_path=rel_path,
+                drive_id=it.drive_id if it else None,
             )
             self.db.update_status(rel_path, SyncStatus.QUEUED_UPLOAD, error=None)
+            self.refresh_history()
+        elif it and it.drive_id:
+            priority = TaskPriority.MEDIUM if (it.size or 0) < 10 * 1024 * 1024 else TaskPriority.LOW
+            self.sync_service.queue.add_task(
+                task_type=TaskType.DOWNLOAD,
+                rel_path=rel_path,
+                priority=priority,
+                drive_id=it.drive_id,
+                extra={"file_meta": {"modifiedTime": it.mtime_remote, "md5Checksum": it.md5_checksum}},
+            )
+            self.db.update_status(rel_path, SyncStatus.QUEUED_DOWNLOAD, error=None)
             self.refresh_history()
 
     def _on_refresh_clicked(self):
@@ -251,17 +267,29 @@ class ActivityDialog(QDialog):
             full_path = (self.sync_service.config.sync_dir / it.rel_path) if self.sync_service else None
             if full_path and full_path.exists():
                 self.sync_service.queue.add_task(
-                    task_type="upload",
+                    task_type=TaskType.UPLOAD,
                     rel_path=it.rel_path,
+                    drive_id=it.drive_id,
                 )
                 self.db.update_status(it.rel_path, SyncStatus.QUEUED_UPLOAD, error=None)
+                requeued += 1
+            elif it.drive_id and self.sync_service:
+                priority = TaskPriority.MEDIUM if (it.size or 0) < 10 * 1024 * 1024 else TaskPriority.LOW
+                self.sync_service.queue.add_task(
+                    task_type=TaskType.DOWNLOAD,
+                    rel_path=it.rel_path,
+                    priority=priority,
+                    drive_id=it.drive_id,
+                    extra={"file_meta": {"modifiedTime": it.mtime_remote, "md5Checksum": it.md5_checksum}},
+                )
+                self.db.update_status(it.rel_path, SyncStatus.QUEUED_DOWNLOAD, error=None)
                 requeued += 1
 
         self.refresh_history()
         QMessageBox.information(
             self,
             "Reintentar sincronización",
-            f"Se han puesto en cola {requeued} archivo(s) para reintentar la subida."
+            f"Se han puesto en cola {requeued} archivo(s) para reintentar la sincronización."
         )
 
     def refresh_history(self):

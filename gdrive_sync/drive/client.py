@@ -9,6 +9,7 @@ import mimetypes
 import os
 import shutil
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -193,7 +194,7 @@ class GoogleDriveClient:
         if mime_type is None:
             mime_type = "application/octet-stream"
 
-        media = MediaFileUpload(str(p), mimetype=mime_type, resumable=True)
+        media = MediaFileUpload(str(p), mimetype=mime_type, chunksize=4 * 1024 * 1024, resumable=True)
 
         if existing_file_id:
             # Update existing file content & timestamp
@@ -216,10 +217,19 @@ class GoogleDriveClient:
 
         response = None
         total_size = p.stat().st_size
+        retries = 0
+        max_retries = 5
         while response is None:
-            status, response = request.next_chunk()
-            if status and progress_callback:
-                progress_callback(int(status.progress() * total_size), total_size)
+            try:
+                status, response = request.next_chunk(num_retries=3)
+                retries = 0
+                if status and progress_callback:
+                    progress_callback(int(status.progress() * total_size), total_size)
+            except Exception as e:
+                retries += 1
+                if retries > max_retries:
+                    raise
+                time.sleep(min(2 ** retries, 10))
 
         if progress_callback:
             progress_callback(total_size, total_size)
@@ -284,13 +294,23 @@ class GoogleDriveClient:
             tmp_dest = dest.with_suffix(dest.suffix + ".sync_tmp")
             request = self.service.files().get_media(fileId=drive_id)
 
+        chunk_size = 4 * 1024 * 1024
         with open(tmp_dest, "wb") as fh:
-            downloader = MediaIoBaseDownload(fh, request, chunksize=1024 * 1024)
+            downloader = MediaIoBaseDownload(fh, request, chunksize=chunk_size)
             done = False
+            retries = 0
+            max_retries = 5
             while not done:
-                status, done = downloader.next_chunk()
-                if status and progress_callback:
-                    progress_callback(int(status.resumable_progress), int(status.total_size))
+                try:
+                    status, done = downloader.next_chunk(num_retries=3)
+                    retries = 0
+                    if status and progress_callback:
+                        progress_callback(int(status.resumable_progress), int(status.total_size))
+                except Exception as e:
+                    retries += 1
+                    if retries > max_retries:
+                        raise
+                    time.sleep(min(2 ** retries, 10))
 
         # Atomically replace destination
         if dest.exists():
