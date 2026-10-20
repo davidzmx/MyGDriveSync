@@ -41,6 +41,15 @@ Una aplicación cliente de sincronización bidireccional en carpeta local para *
    * Almacenamiento seguro de tokens OAuth 2.0 con **Keyring** (**KWallet** en KDE, **Windows Credential Manager** en Windows) y respaldo en archivo con permisos restringidos `0600`.
    * Base de datos SQLite local en modo **WAL** (Write-Ahead Logging) para operaciones atómicas y concurrentes.
 
+7. **Exportación y Respaldo de Documentos de Google (Docs, Sheets, Slides):**
+   * Los documentos nativos creados en la web de Google (Google Docs, Sheets, Slides) no son archivos binarios, sino bases de datos colaborativas en tiempo real.
+   * `MyGDriveSync` los exporta y descarga automáticamente en formato Office (`.docx`, `.xlsx`, `.pptx`) o imágenes (`.png` para dibujos) para que dispongas de una copia de respaldo local legible sin conexión.
+   * > [!IMPORTANT]
+   > **Nota sobre sincronización bidireccional de Documentos de Google:**
+   > * **Archivos normales (.pdf, .zip, fotos, videos, código y archivos Office reales):** Sincronización **100% bidireccional** (cualquier cambio local se sube y cualquier cambio remoto se descarga).
+   > * **Documentos nativos de Google (.docx/.xlsx descargados de Docs/Sheets):** La API de Google Drive no permite sobreescribir el contenido interno de un Google Doc nativo mediante una carga binaria. Por ello, la edición de texto debe realizarse directamente en la web de Google Drive. Si deseas editar localmente en LibreOffice/MS Office y que se sincronice en la nube, crea y guarda tus archivos como `.docx` o `.xlsx` reales.
+   > * **Eliminación:** Si eliminas el archivo `.docx` / `.xlsx` localmente, `MyGDriveSync` sí moverá el documento original a la **Papelera de Google Drive**.
+
 ---
 
 ## 📂 Estructura del Proyecto

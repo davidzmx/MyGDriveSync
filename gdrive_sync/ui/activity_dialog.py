@@ -69,6 +69,19 @@ class ActivityDialog(QDialog):
         self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         layout.addWidget(self.table)
 
+        # Note on Google Docs limitation
+        lbl_docs_note = QLabel(
+            "💡 <b>Nota sobre Documentos de Google:</b> Los archivos creados en Google Docs, Sheets o Slides se descargan "
+            "en formato Office (<i>.docx, .xlsx, .pptx</i>) como respaldo para lectura sin conexión. "
+            "Para editarlos y conservar los cambios en la nube, modifícalos directamente desde la web de Google Drive."
+        )
+        lbl_docs_note.setWordWrap(True)
+        lbl_docs_note.setStyleSheet(
+            "background-color: #f1f8fe; border: 1px solid #c2e0ff; border-radius: 4px; "
+            "padding: 6px 10px; font-size: 11px; color: #1a5276;"
+        )
+        layout.addWidget(lbl_docs_note)
+
         # Bottom buttons
         btn_layout = QHBoxLayout()
 

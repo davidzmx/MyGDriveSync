@@ -128,6 +128,22 @@ class PreferencesDialog(QDialog):
         sync_layout.addLayout(poll_box)
 
         layout.addWidget(sync_group)
+
+        # Google Docs information group
+        docs_group = QGroupBox("Sincronización de Documentos de Google (Docs, Sheets, Slides)")
+        docs_layout = QVBoxLayout(docs_group)
+        lbl_docs = QLabel(
+            "• <b>Archivos estándar (PDF, fotos, ZIP, Office real):</b> Sincronización 100% bidireccional (PC ⇄ Drive).<br>"
+            "• <b>Documentos creados en Google (Docs, Sheets, Slides):</b> Se descargan automáticamente en formato Office "
+            "(.docx, .xlsx, .pptx) como copia para visualización sin conexión. Debido a limitaciones de la API oficial de Google, "
+            "la edición de su contenido debe realizarse directamente en la web de Google Drive para actualizarse en la nube.<br>"
+            "<i>(Nota: Si borras el archivo localmente, sí se moverá a la papelera en Google Drive).</i>"
+        )
+        lbl_docs.setWordWrap(True)
+        lbl_docs.setStyleSheet("font-size: 11px; color: #34495e; line-height: 140%;")
+        docs_layout.addWidget(lbl_docs)
+        layout.addWidget(docs_group)
+
         layout.addStretch()
 
     def _setup_account_tab(self):
