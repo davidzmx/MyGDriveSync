@@ -99,7 +99,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -107,6 +107,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='assets/gdrive-sync.ico',
+    version='version_info.txt',
 )
 
 coll = COLLECT(
@@ -114,7 +115,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='MyGDriveSync',
 )
